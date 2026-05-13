@@ -736,6 +736,13 @@
         // Capture ESC early and stop it from propagating to the parent.
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && activeTabId && tabs[activeTabId] && !tabs[activeTabId].exited) {
+                // If context menu is open, dismiss it instead of sending ESC to terminal.
+                if (contextMenuEl) {
+                    dismissContextMenu();
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return;
+                }
                 e.stopPropagation();
                 e.preventDefault();
                 bufferInput(activeTabId, '\x1b');
@@ -760,6 +767,73 @@
         document.addEventListener('click', refocusActiveTerminal);
         window.addEventListener('focus', refocusActiveTerminal);
         document.addEventListener('focusin', refocusActiveTerminal);
+
+        // ---------------------
+        // Context Menu (Copy/Paste)
+        // ---------------------
+        var contextMenuEl = null;
+
+        function showContextMenu(x, y, id) {
+            dismissContextMenu();
+            var entry = tabs[id];
+            if (!entry) return;
+
+            var menu = document.createElement('div');
+            menu.className = 'context-menu';
+
+            var hasSelection = !!entry.terminal.getSelection();
+
+            var copyItem = document.createElement('div');
+            copyItem.className = 'context-menu-item' + (hasSelection ? '' : ' disabled');
+            copyItem.innerHTML = '<span>Copy</span><span class="context-menu-shortcut">Ctrl+Shift+C</span>';
+            if (hasSelection) {
+                copyItem.addEventListener('click', function () {
+                    var sel = entry.terminal.getSelection();
+                    if (sel) navigator.clipboard.writeText(sel);
+                    dismissContextMenu();
+                    entry.terminal.focus();
+                });
+            }
+
+            var pasteItem = document.createElement('div');
+            pasteItem.className = 'context-menu-item';
+            pasteItem.innerHTML = '<span>Paste</span><span class="context-menu-shortcut">Ctrl+Shift+V</span>';
+            pasteItem.addEventListener('click', function () {
+                navigator.clipboard.readText().then(function (text) {
+                    if (text && !entry.exited) bufferInput(id, text);
+                });
+                dismissContextMenu();
+                entry.terminal.focus();
+            });
+
+            menu.appendChild(copyItem);
+            menu.appendChild(pasteItem);
+            document.body.appendChild(menu);
+
+            // Keep menu within viewport
+            var rect = menu.getBoundingClientRect();
+            if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 4;
+            if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+
+            contextMenuEl = menu;
+        }
+
+        function dismissContextMenu() {
+            if (contextMenuEl) {
+                contextMenuEl.remove();
+                contextMenuEl = null;
+            }
+        }
+
+        document.addEventListener('click', dismissContextMenu);
+
+        containerEl.addEventListener('contextmenu', function (e) {
+            if (!activeTabId || !tabs[activeTabId] || !navigator.clipboard) return;
+            e.preventDefault();
+            showContextMenu(e.clientX, e.clientY, activeTabId);
+        });
 
         // ---------------------
         // Resize Handling
