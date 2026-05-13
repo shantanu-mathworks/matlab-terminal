@@ -782,11 +782,12 @@
             menu.className = 'context-menu';
 
             var hasSelection = !!entry.terminal.getSelection();
+            var canCopy = hasSelection && !!(navigator.clipboard && navigator.clipboard.writeText);
 
             var copyItem = document.createElement('div');
-            copyItem.className = 'context-menu-item' + (hasSelection ? '' : ' disabled');
+            copyItem.className = 'context-menu-item' + (canCopy ? '' : ' disabled');
             copyItem.innerHTML = '<span>Copy</span><span class="context-menu-shortcut">Ctrl+Shift+C</span>';
-            if (hasSelection) {
+            if (canCopy) {
                 copyItem.addEventListener('click', function () {
                     var sel = entry.terminal.getSelection();
                     if (sel) navigator.clipboard.writeText(sel);
@@ -795,16 +796,19 @@
                 });
             }
 
+            var hasClipboard = !!(navigator.clipboard && navigator.clipboard.readText);
             var pasteItem = document.createElement('div');
-            pasteItem.className = 'context-menu-item';
+            pasteItem.className = 'context-menu-item' + (hasClipboard ? '' : ' disabled');
             pasteItem.innerHTML = '<span>Paste</span><span class="context-menu-shortcut">Ctrl+Shift+V</span>';
-            pasteItem.addEventListener('click', function () {
-                navigator.clipboard.readText().then(function (text) {
-                    if (text && !entry.exited) bufferInput(id, text);
+            if (hasClipboard) {
+                pasteItem.addEventListener('click', function () {
+                    navigator.clipboard.readText().then(function (text) {
+                        if (text && !entry.exited) bufferInput(id, text);
+                    });
+                    dismissContextMenu();
+                    entry.terminal.focus();
                 });
-                dismissContextMenu();
-                entry.terminal.focus();
-            });
+            }
 
             menu.appendChild(copyItem);
             menu.appendChild(pasteItem);
@@ -829,11 +833,16 @@
 
         document.addEventListener('click', dismissContextMenu);
 
-        containerEl.addEventListener('contextmenu', function (e) {
-            if (!activeTabId || !tabs[activeTabId] || !navigator.clipboard) return;
+        // Use capture phase to intercept before native CEF/uihtml context menu.
+        document.addEventListener('contextmenu', function (e) {
+            if (!activeTabId || !tabs[activeTabId]) return;
+            // Only trigger within the terminal area.
+            if (!containerEl.contains(e.target)) return;
             e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
             showContextMenu(e.clientX, e.clientY, activeTabId);
-        });
+        }, true);
 
         // ---------------------
         // Resize Handling
