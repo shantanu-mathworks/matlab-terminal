@@ -1,12 +1,12 @@
-classdef Terminal < handle
+classdef terminal < handle
     %TERMINAL Embeds a system terminal inside a MATLAB figure using uihtml.
     %
-    %   t = Terminal()                    — docked terminal with default name
-    %   t = Terminal(Name="Build")        — docked terminal with custom name
-    %   t = Terminal(WindowStyle="normal") — undocked terminal in its own window
-    %   t = Terminal(MCP=true)            — share MATLAB session for AI agents (Claude)
-    %   t = Terminal(Agentic=true)       — full agent integration with MathWorks toolkits
-    %   t = Terminal(parent)              — terminal inside an existing figure/panel
+    %   t = terminal()                    — docked terminal with default name
+    %   t = terminal(Name="Build")        — docked terminal with custom name
+    %   t = terminal(WindowStyle="normal") — undocked terminal in its own window
+    %   t = terminal(MCP=true)            — share MATLAB session for AI agents (Claude)
+    %   t = terminal(Agentic=true)       — full agent integration with MathWorks toolkits
+    %   t = terminal(parent)              — terminal inside an existing figure/panel
     %   delete(t)                         — closes the terminal and kills the server
     %
     %   Name-Value Arguments:
@@ -44,42 +44,42 @@ classdef Terminal < handle
     %                     Toolkits - ["matlab"] or ["simulink"] or ["matlab","simulink"]
     %
     %   Static methods:
-    %     Terminal.version()  — return the installed toolbox version string
-    %     Terminal.list()     — return handles to all running terminals
-    %     Terminal.closeAll() — close all running terminals
-    %     Terminal.update()          — update to the latest stable release from GitHub
-    %     Terminal.update("1.2.0")  — install a specific version (release candidates too)
-    %     Terminal.versions()       — list available releases on GitHub
-    %     Terminal.themes()   — list available theme names
-    %     Terminal.setDefaultTheme("dracula") — set default for new terminals
-    %     Terminal.getDefaultTheme()          — get current default theme
-    %     Terminal.verify()         — verify binary integrity against GitHub release
-    %     Terminal.test()          — run the built-in test suite with report
-    %     Terminal.setAgentOptions(opts)    — save agent preferences
-    %     Terminal.getAgentOptions()        — retrieve saved agent preferences
-    %     Terminal.resetAgentOptions()      — clear preferences, re-run wizard
-    %     Terminal.updateAgenticToolkit()   — update installed agentic toolkit(s)
+    %     terminal.version()  — return the installed toolbox version string
+    %     terminal.list()     — return handles to all running terminals
+    %     terminal.closeAll() — close all running terminals
+    %     terminal.update()          — update to the latest stable release from GitHub
+    %     terminal.update("1.2.0")  — install a specific version (release candidates too)
+    %     terminal.versions()       — list available releases on GitHub
+    %     terminal.themes()   — list available theme names
+    %     terminal.setDefaultTheme("dracula") — set default for new terminals
+    %     terminal.getDefaultTheme()          — get current default theme
+    %     terminal.verify()         — verify binary integrity against GitHub release
+    %     terminal.test()          — run the built-in test suite with report
+    %     terminal.setAgentOptions(opts)    — save agent preferences
+    %     terminal.getAgentOptions()        — retrieve saved agent preferences
+    %     terminal.resetAgentOptions()      — clear preferences, re-run wizard
+    %     terminal.updateAgenticToolkit()   — update installed agentic toolkit(s)
     %
     %   Examples:
-    %     t = Terminal();
-    %     t = Terminal(Name="Git", WindowStyle="normal");
-    %     t = Terminal(Shell="zsh");
-    %     t = Terminal(Shell="powershell.exe");
-    %     t = Terminal(Theme="dracula");
-    %     t = Terminal(Theme="solarized-light");
+    %     t = terminal();
+    %     t = terminal(Name="Git", WindowStyle="normal");
+    %     t = terminal(Shell="zsh");
+    %     t = terminal(Shell="powershell.exe");
+    %     t = terminal(Theme="dracula");
+    %     t = terminal(Theme="solarized-light");
     %     t.Theme = "monokai";    % change theme after creation
-    %     Terminal.setDefaultTheme("dracula");  % persist across sessions
-    %     Terminal.getDefaultTheme();
-    %     t = Terminal(MCP=true);
-    %     t = Terminal(Agentic=true);
-    %     t = Terminal(Agentic=true, AgentOptions=struct('Agent',"claude",'Toolkits',["matlab"]));
-    %     Terminal.setAgentOptions(struct('Agent',"gemini",'Toolkits',["matlab","simulink"]));
-    %     Terminal.resetAgentOptions();
+    %     terminal.setDefaultTheme("dracula");  % persist across sessions
+    %     terminal.getDefaultTheme();
+    %     t = terminal(MCP=true);
+    %     t = terminal(Agentic=true);
+    %     t = terminal(Agentic=true, AgentOptions=struct('Agent',"claude",'Toolkits',["matlab"]));
+    %     terminal.setAgentOptions(struct('Agent',"gemini",'Toolkits',["matlab","simulink"]));
+    %     terminal.resetAgentOptions();
     %     delete(t);
-    %     Terminal.update();
-    %     Terminal.update("0.8.0-rc1");
-    %     Terminal.versions();
-    %     Terminal.verify();
+    %     terminal.update();
+    %     terminal.update("0.8.0-rc1");
+    %     terminal.versions();
+    %     terminal.verify();
 
     % Copyright 2026 The MathWorks, Inc.
 
@@ -138,7 +138,7 @@ classdef Terminal < handle
     end
 
     methods
-        function obj = Terminal(parent, options)
+        function obj = terminal(parent, options)
             %TERMINAL Construct a terminal instance.
             arguments
                 parent = []
@@ -155,16 +155,16 @@ classdef Terminal < handle
 
             % Use saved default theme if not explicitly provided.
             if ismissing(options.Theme)
-                options.Theme = Terminal.getDefaultTheme();
+                options.Theme = terminal.getDefaultTheme();
             end
-            internal.Themes.validate(options.Theme);
+            internal.TerminalThemes.validate(options.Theme);
             obj.Theme = options.Theme;
 
             % --- Validate shell if specified, resolve default if not ---
             if obj.Shell ~= ""
-                Terminal.validateShell(obj.Shell);
+                terminal.validateShell(obj.Shell);
             else
-                obj.Shell = Terminal.defaultShell();
+                obj.Shell = terminal.defaultShell();
             end
 
             % --- Agentic and MCP are mutually exclusive ---
@@ -175,9 +175,9 @@ classdef Terminal < handle
 
             % --- MCP: share MATLAB session for AI agents ---
             if options.MCP
-                serverBin = Terminal.setupMCP();
+                serverBin = terminal.setupMCP();
                 extensionFile = fullfile( ...
-                    fileparts(which('TerminalMCPTools.matlab_editor_list')), ...
+                    fileparts(which('terminaltools.matlab_editor_list')), ...
                     'matlab-editor-tools.json');
                 obj.MCPCommand = sprintf( ...
                     'claude mcp add --transport stdio matlab -- "%s" --matlab-session-mode=existing --extension-file="%s"', ...
@@ -187,35 +187,35 @@ classdef Terminal < handle
             % --- Agentic: full agent integration with toolkits ---
             if options.Agentic
                 % Phase 1: MCP Core Server (reuse existing infrastructure)
-                serverBin = Terminal.setupMCP();
+                serverBin = terminal.setupMCP();
 
                 % Phase 2: Agent options (saved prefs, explicit, or wizard)
                 if ~isempty(fieldnames(options.AgentOptions))
                     agentOpts = options.AgentOptions;
-                    Terminal.validateAgentOptions(agentOpts);
-                    Terminal.setAgentOptions(agentOpts);
-                elseif ispref('Terminal', 'AgentOptions')
-                    agentOpts = Terminal.getAgentOptions();
+                    terminal.validateAgentOptions(agentOpts);
+                    terminal.setAgentOptions(agentOpts);
+                elseif ispref('terminal', 'AgentOptions')
+                    agentOpts = terminal.getAgentOptions();
                 else
-                    agentOpts = Terminal.agenticWizard();
+                    agentOpts = terminal.agenticWizard();
                 end
 
                 % Phase 3: Agentic Toolkits
                 toolkitPaths = struct();
                 toolkits = string(agentOpts.Toolkits);
                 if ismember("matlab", toolkits)
-                    toolkitPaths.matlab = Terminal.ensureAgenticToolkit("matlab");
+                    toolkitPaths.matlab = terminal.ensureAgenticToolkit("matlab");
                 end
                 if ismember("simulink", toolkits)
-                    toolkitPaths.simulink = Terminal.ensureAgenticToolkit("simulink");
-                    Terminal.initializeSimulinkToolkit(toolkitPaths.simulink);
+                    toolkitPaths.simulink = terminal.ensureAgenticToolkit("simulink");
+                    terminal.initializeSimulinkToolkit(toolkitPaths.simulink);
                 end
 
                 % Phase 4: Build merged extension file
-                extensionFile = Terminal.mergeExtensionFiles(toolkits, toolkitPaths);
+                extensionFile = terminal.mergeExtensionFiles(toolkits, toolkitPaths);
 
                 % Phase 5: Register with agent
-                obj.MCPCommand = Terminal.buildAgentRegistration( ...
+                obj.MCPCommand = terminal.buildAgentRegistration( ...
                     agentOpts.Agent, serverBin, extensionFile, toolkitPaths);
             end
 
@@ -235,19 +235,19 @@ classdef Terminal < handle
             obj.ParentFigure = parent;
 
             % --- Auth token (32-char hex, cryptographically random) ---
-            obj.AuthToken = Terminal.generateToken();
+            obj.AuthToken = terminal.generateToken();
 
             % --- Extract bundled assets if needed ---
-            Terminal.extractWebAssets();
+            terminal.extractWebAssets();
 
             % --- Locate the server binary ---
-            obj.ServerBinary = Terminal.findBinary();
+            obj.ServerBinary = terminal.findBinary();
             if isempty(obj.ServerBinary)
                 error('Terminal:BinaryNotFound', ...
                     ['Server binary "%s" not found.\n' ...
                      'The toolbox installation may be corrupted.\n' ...
-                     'Run  Terminal.update()  to reinstall.'], ...
-                    Terminal.SERVER_BINARY_NAME);
+                     'Run  terminal.update()  to reinstall.'], ...
+                    terminal.SERVER_BINARY_NAME);
             end
 
             % --- Build environment info ---
@@ -314,7 +314,7 @@ classdef Terminal < handle
 
             if isempty(port)
                 if ~isempty(serverPid)
-                    Terminal.killProcess(serverPid);
+                    terminal.killProcess(serverPid);
                 end
                 % Read server log for diagnostics.
                 serverLog = '';
@@ -349,11 +349,11 @@ classdef Terminal < handle
                 'MediaType', 'application/json', 'Timeout', 2);
 
             % --- Read MATLAB theme / font settings ---
-            themeConfig = internal.Themes.resolve(obj.Theme);
+            themeConfig = internal.TerminalThemes.resolve(obj.Theme);
 
             % --- Locate web assets ---
             % extractWebAssets (called above) ensures these exist.
-            htmlDir = fullfile(Terminal.toolboxDir(), 'html');
+            htmlDir = fullfile(terminal.toolboxDir(), 'html');
             htmlFile = fullfile(htmlDir, 'index.html');
             if ~isfile(htmlFile)
                 error('Terminal:HTMLNotFound', ...
@@ -378,7 +378,7 @@ classdef Terminal < handle
             end
 
             % Register this instance.
-            Terminal.registry('add', obj);
+            terminal.registry('add', obj);
 
             % Use a one-shot timer to initialize AFTER the constructor returns.
             % This prevents DataChangedFcn from firing during construction.
@@ -388,11 +388,11 @@ classdef Terminal < handle
         end
 
         function set.Theme(obj, value)
-            internal.Themes.validate(value);
+            internal.TerminalThemes.validate(value);
             obj.Theme = value; %#ok<MCSUP>
             % Push live update if already initialized.
             if ~isempty(obj.ThemeConfig) %#ok<MCSUP>
-                newConfig = internal.Themes.resolve(value);
+                newConfig = internal.TerminalThemes.resolve(value);
                 obj.ThemeConfig = newConfig; %#ok<MCSUP>
                 obj.sendToJS(struct('type', 'theme', 'theme', newConfig)); %#ok<MCSUP>
             end
@@ -400,7 +400,7 @@ classdef Terminal < handle
 
         function delete(obj)
             %DELETE Clean up: stop timer, kill server, close figure.
-            Terminal.registry('remove', obj);
+            terminal.registry('remove', obj);
             if ~isempty(obj.InitTimer) && isvalid(obj.InitTimer)
                 stop(obj.InitTimer);
                 delete(obj.InitTimer);
@@ -415,7 +415,7 @@ classdef Terminal < handle
             end
             if ~isempty(obj.ServerProcess) && isstruct(obj.ServerProcess) ...
                     && isfield(obj.ServerProcess, 'pid') && ~isnan(obj.ServerProcess.pid)
-                Terminal.killProcess(obj.ServerProcess.pid);
+                terminal.killProcess(obj.ServerProcess.pid);
             end
             if ~isempty(obj.ParentFigure) && isvalid(obj.ParentFigure)
                 if isprop(obj.ParentFigure, 'CloseRequestFcn')
@@ -477,7 +477,7 @@ classdef Terminal < handle
                 return;
             end
             obj.LastFigureColor = c;
-            newConfig = internal.Themes.resolve(obj.Theme);
+            newConfig = internal.TerminalThemes.resolve(obj.Theme);
             obj.ThemeConfig = newConfig;
             obj.sendToJS(struct('type', 'theme', ...
                 'theme', newConfig));
@@ -591,7 +591,7 @@ classdef Terminal < handle
             % Check if server process is still alive.
             if ~isempty(obj.ServerProcess) && isstruct(obj.ServerProcess) ...
                     && isfield(obj.ServerProcess, 'pid') && ~isnan(obj.ServerProcess.pid)
-                if Terminal.isProcessAlive(obj.ServerProcess.pid)
+                if terminal.isProcessAlive(obj.ServerProcess.pid)
                     % Server is alive but unresponsive — don't restart.
                     obj.IsRestarting = false;
                     return;
@@ -654,7 +654,7 @@ classdef Terminal < handle
 
                 if isempty(port)
                     if ~isempty(serverPid)
-                        Terminal.killProcess(serverPid);
+                        terminal.killProcess(serverPid);
                     end
                     obj.IsRestarting = false;
                     return;
@@ -768,7 +768,7 @@ classdef Terminal < handle
             end
             fig = obj.ParentFigure;
             closeTimer = timer('StartDelay', 0.5, ...
-                'TimerFcn', @(t,~) Terminal.deferredClose(t, obj, fig));
+                'TimerFcn', @(t,~) terminal.deferredClose(t, obj, fig));
             start(closeTimer);
         end
 
@@ -809,82 +809,82 @@ classdef Terminal < handle
         function v = version()
             %VERSION Return the installed toolbox version string.
             %
-            %   v = Terminal.version()
-            v = TerminalVersion();
+            %   v = terminal.version()
+            v = terminalVersion();
         end
 
         function terminals = list()
-            %LIST Return handles to all running Terminal instances.
+            %LIST Return handles to all running terminal instances.
             %
-            %   terminals = Terminal.list()
+            %   terminals = terminal.list()
             %
-            %   Returns a (possibly empty) array of Terminal handles.
-            terminals = Terminal.registry('get');
+            %   Returns a (possibly empty) array of terminal handles.
+            terminals = terminal.registry('get');
         end
 
         function setAgentOptions(opts)
             %SETAGENTOPTIONS Save agent preferences for Agentic=true.
             %
-            %   Terminal.setAgentOptions(struct('Agent',"claude",'Toolkits',["matlab"]))
+            %   terminal.setAgentOptions(struct('Agent',"claude",'Toolkits',["matlab"]))
             %
             %   Persists across MATLAB sessions. Used automatically by
-            %   Terminal(Agentic=true) on subsequent runs.
-            Terminal.validateAgentOptions(opts);
-            setpref('Terminal', 'AgentOptions', opts);
+            %   terminal(Agentic=true) on subsequent runs.
+            terminal.validateAgentOptions(opts);
+            setpref('terminal', 'AgentOptions', opts);
         end
 
         function opts = getAgentOptions()
             %GETAGENTOPTIONS Retrieve saved agent preferences.
             %
-            %   opts = Terminal.getAgentOptions()
-            if ispref('Terminal', 'AgentOptions')
-                opts = getpref('Terminal', 'AgentOptions');
+            %   opts = terminal.getAgentOptions()
+            if ispref('terminal', 'AgentOptions')
+                opts = getpref('terminal', 'AgentOptions');
             else
                 error('Terminal:NoAgentOptions', ...
-                    'No saved agent options. Run Terminal(Agentic=true) to configure.');
+                    'No saved agent options. Run terminal(Agentic=true) to configure.');
             end
         end
 
         function resetAgentOptions()
             %RESETAGENTOPTIONS Clear saved agent preferences.
             %
-            %   Terminal.resetAgentOptions()
+            %   terminal.resetAgentOptions()
             %
-            %   Next call to Terminal(Agentic=true) will re-run the setup wizard.
-            if ispref('Terminal', 'AgentOptions')
-                rmpref('Terminal', 'AgentOptions');
+            %   Next call to terminal(Agentic=true) will re-run the setup wizard.
+            if ispref('terminal', 'AgentOptions')
+                rmpref('terminal', 'AgentOptions');
             end
-            fprintf('Agent options cleared. Next Terminal(Agentic=true) will re-run setup.\n');
+            fprintf('Agent options cleared. Next terminal(Agentic=true) will re-run setup.\n');
         end
 
         function updateAgenticToolkit(toolkit)
             %UPDATEAGENTICTOOLKIT Update installed agentic toolkit(s) to latest.
             %
-            %   Terminal.updateAgenticToolkit()            % update all
-            %   Terminal.updateAgenticToolkit("matlab")    % update MATLAB only
-            %   Terminal.updateAgenticToolkit("simulink")  % update Simulink only
+            %   terminal.updateAgenticToolkit()            % update all
+            %   terminal.updateAgenticToolkit("matlab")    % update MATLAB only
+            %   terminal.updateAgenticToolkit("simulink")  % update Simulink only
             arguments
                 toolkit string = ""
             end
             if toolkit == ""
                 % Update all installed toolkits.
-                baseDir = fullfile(Terminal.toolboxDir(), 'bin', Terminal.AGENTIC_INSTALL_DIR);
+                baseDir = fullfile(terminal.toolboxDir(), 'bin', terminal.AGENTIC_INSTALL_DIR);
                 if isfolder(fullfile(baseDir, 'matlab'))
-                    Terminal.ensureAgenticToolkit("matlab", true);
+                    terminal.ensureAgenticToolkit("matlab", true);
                 end
                 if isfolder(fullfile(baseDir, 'simulink'))
-                    Terminal.ensureAgenticToolkit("simulink", true);
+                    terminal.ensureAgenticToolkit("simulink", true);
                 end
             else
-                Terminal.ensureAgenticToolkit(toolkit, true);
+                terminal.ensureAgenticToolkit(toolkit, true);
             end
         end
 
         function closeAll()
-            %CLOSEALL Close all running Terminal instances.
+            %CLOSEALL Close all running terminal instances.
             %
-            %   Terminal.closeAll()
-            terminals = Terminal.list();
+            %   terminal.closeAll()
+            terminals = terminal.list();
             for i = 1:numel(terminals)
                 delete(terminals(i));
             end
@@ -893,32 +893,32 @@ classdef Terminal < handle
         function names = themes()
             %THEMES List available built-in theme names.
             %
-            %   Terminal.themes()
-            names = internal.Themes.list();
+            %   terminal.themes()
+            names = internal.TerminalThemes.list();
         end
 
         function setDefaultTheme(theme)
-            %SETDEFAULTTHEME Set the default theme for new Terminal instances.
+            %SETDEFAULTTHEME Set the default theme for new terminal instances.
             %
-            %   Terminal.setDefaultTheme("dracula")
-            %   Terminal.setDefaultTheme("auto")      — reset to default
+            %   terminal.setDefaultTheme("dracula")
+            %   terminal.setDefaultTheme("auto")      — reset to default
             %
             %   The default theme persists across MATLAB sessions. New
             %   terminals use this theme unless overridden with Theme=.
-            internal.Themes.validate(theme);
+            internal.TerminalThemes.validate(theme);
             if isstruct(theme)
-                setpref('Terminal', 'Theme', theme);
+                setpref('terminal', 'Theme', theme);
             else
-                setpref('Terminal', 'Theme', string(theme));
+                setpref('terminal', 'Theme', string(theme));
             end
         end
 
         function theme = getDefaultTheme()
             %GETDEFAULTTHEME Return the current default theme.
             %
-            %   Terminal.getDefaultTheme()
-            if ispref('Terminal', 'Theme')
-                theme = getpref('Terminal', 'Theme');
+            %   terminal.getDefaultTheme()
+            if ispref('terminal', 'Theme')
+                theme = getpref('terminal', 'Theme');
             else
                 theme = "auto";
             end
@@ -927,10 +927,10 @@ classdef Terminal < handle
         function update(version)
             %UPDATE Check for and install a toolbox version from GitHub.
             %
-            %   Terminal.update()          — update to the latest stable release
-            %   Terminal.update("1.2.0")   — install a specific version
-            %   Terminal.update("v1.2.0")  — "v" prefix is accepted
-            %   Terminal.update("1.2.0-rc1") — release candidates work too
+            %   terminal.update()          — update to the latest stable release
+            %   terminal.update("1.2.0")   — install a specific version
+            %   terminal.update("v1.2.0")  — "v" prefix is accepted
+            %   terminal.update("1.2.0-rc1") — release candidates work too
             %
             %   When called without arguments, only releases marked as
             %   "Latest" on GitHub are considered (pre-releases and drafts
@@ -943,19 +943,19 @@ classdef Terminal < handle
             disp('Checking for updates...');
 
             if version == ""
-                release = Terminal.fetchLatestRelease();
+                release = terminal.fetchLatestRelease();
             else
-                release = Terminal.fetchRelease(version);
+                release = terminal.fetchRelease(version);
             end
 
-            targetVersion = Terminal.tagToVersion(release.tag_name);
-            installedVersion = string(Terminal.version());
+            targetVersion = terminal.tagToVersion(release.tag_name);
+            installedVersion = string(terminal.version());
 
             fprintf('  Installed version: %s\n', installedVersion);
             fprintf('  Target version:    %s\n', targetVersion);
 
             % Find the .mltbx asset in the release.
-            mltbxURL = Terminal.findMltbxAsset(release);
+            mltbxURL = terminal.findMltbxAsset(release);
 
             % Ask for confirmation.
             if targetVersion == installedVersion
@@ -982,7 +982,7 @@ classdef Terminal < handle
 
             % Step 2: Close all open terminals.
             disp('Step 2/5: Closing all open terminals...');
-            Terminal.closeAll();
+            terminal.closeAll();
 
             % Step 3: Remove runtime artifacts before uninstall.
             % Remove files we created at runtime so the uninstaller only
@@ -990,12 +990,12 @@ classdef Terminal < handle
             % busy files (e.g., running binaries, NFS lock files).
             disp('Step 3/5: Clearing any cached assets...');
             cleanupDirs = {
-                fullfile(Terminal.toolboxDir(), 'bin')
-                fullfile(Terminal.toolboxDir(), 'html')
+                fullfile(terminal.toolboxDir(), 'bin')
+                fullfile(terminal.toolboxDir(), 'html')
             };
             cleanupFiles = {
-                fullfile(Terminal.toolboxDir(), '.extracted')
-                fullfile(Terminal.toolboxDir(), 'merged-extension-tools.json')
+                fullfile(terminal.toolboxDir(), '.extracted')
+                fullfile(terminal.toolboxDir(), 'merged-extension-tools.json')
             };
             for i = 1:numel(cleanupDirs)
                 if isfolder(cleanupDirs{i})
@@ -1011,7 +1011,7 @@ classdef Terminal < handle
             % Step 4: Uninstall current toolbox.
             disp('Step 4/5: Uninstalling current version...');
             try
-                matlab.addons.uninstall(Terminal.TOOLBOX_ID);
+                matlab.addons.uninstall(terminal.TOOLBOX_ID);
             catch
                 % May fail if running from source or not installed as toolbox.
             end
@@ -1033,15 +1033,15 @@ classdef Terminal < handle
         end
 
         function versions()
-            %VERSIONS List available Terminal releases on GitHub.
+            %VERSIONS List available terminal releases on GitHub.
             %
-            %   Terminal.versions()
+            %   terminal.versions()
             %
             %   Displays a table of available releases with version,
             %   date, and whether each is a pre-release or the latest.
 
             url = sprintf('https://api.github.com/repos/%s/releases', ...
-                Terminal.GITHUB_REPO);
+                terminal.GITHUB_REPO);
             try
                 opts = weboptions('ContentType', 'json', 'Timeout', 10);
                 releases = webread(url, opts);
@@ -1055,7 +1055,7 @@ classdef Terminal < handle
                 return;
             end
 
-            installedVersion = string(Terminal.version());
+            installedVersion = string(terminal.version());
             fprintf('  Installed: %s\n\n', installedVersion);
             fprintf('  %-14s %-12s %s\n', 'VERSION', 'DATE', 'LABEL');
             fprintf('  %-14s %-12s %s\n', '-------', '----', '-----');
@@ -1066,7 +1066,7 @@ classdef Terminal < handle
                 else
                     r = releases(i);
                 end
-                v = Terminal.tagToVersion(r.tag_name);
+                v = terminal.tagToVersion(r.tag_name);
                 % Parse date from ISO 8601 published_at.
                 dateStr = extractBefore(string(r.published_at), 'T');
 
@@ -1084,9 +1084,9 @@ classdef Terminal < handle
             % Identify which is the "Latest" release (what update() would pick).
             try
                 latestUrl = sprintf('https://api.github.com/repos/%s/releases/latest', ...
-                    Terminal.GITHUB_REPO);
+                    terminal.GITHUB_REPO);
                 latest = webread(latestUrl, opts);
-                latestV = Terminal.tagToVersion(latest.tag_name);
+                latestV = terminal.tagToVersion(latest.tag_name);
                 fprintf('\n  Latest stable release: %s\n', latestV);
             catch
             end
@@ -1095,24 +1095,24 @@ classdef Terminal < handle
         function verify()
             %VERIFY Verify the installed server binary against the GitHub release.
             %
-            %   Terminal.verify()
+            %   terminal.verify()
             %
             %   Checks the SHA-256 hash of the installed server binary against
             %   the checksums published on the matching GitHub release. If
             %   slsa-verifier is available on the system PATH, also performs
             %   full SLSA provenance verification.
 
-            v = Terminal.version();
+            v = terminal.version();
             if v == "0.0.0-dev"
                 fprintf('Skipping verification: running from source (version 0.0.0-dev).\n');
                 return;
             end
 
             % Ensure assets are extracted (needed on fresh install).
-            Terminal.extractWebAssets();
+            terminal.extractWebAssets();
 
             % Locate the installed binary.
-            binaryPath = Terminal.findBinary();
+            binaryPath = terminal.findBinary();
             if isempty(binaryPath)
                 fprintf(2, 'Server binary not found. Cannot verify.\n');
                 return;
@@ -1121,7 +1121,7 @@ classdef Terminal < handle
             fprintf('Binary path:       %s\n\n', binaryPath);
 
             % Compute local SHA-256.
-            localHash = Terminal.sha256file(binaryPath);
+            localHash = terminal.sha256file(binaryPath);
             fprintf('Local SHA-256:     %s\n', localHash);
 
             % Determine expected asset name for this platform.
@@ -1140,7 +1140,7 @@ classdef Terminal < handle
             tag = "v" + v;
             checksumsURL = sprintf( ...
                 'https://github.com/%s/releases/download/%s/checksums.txt', ...
-                Terminal.GITHUB_REPO, tag);
+                terminal.GITHUB_REPO, tag);
             fprintf('Fetching checksums from %s release...\n', tag);
             try
                 raw = webread(checksumsURL, weboptions('ContentType', 'text', 'Timeout', 10));
@@ -1183,7 +1183,7 @@ classdef Terminal < handle
             end
 
             % Find or offer to download slsa-verifier.
-            verifierBin = Terminal.findOrInstallSLSAVerifier();
+            verifierBin = terminal.findOrInstallSLSAVerifier();
             if isempty(verifierBin)
                 return;
             end
@@ -1199,19 +1199,19 @@ classdef Terminal < handle
             try
                 provenanceURL = sprintf( ...
                     'https://github.com/%s/releases/download/%s/multiple.intoto.jsonl', ...
-                    Terminal.GITHUB_REPO, tag);
+                    terminal.GITHUB_REPO, tag);
                 provenancePath = fullfile(tmpDir, 'multiple.intoto.jsonl');
                 websave(provenancePath, provenanceURL);
 
                 binaryURL = sprintf( ...
                     'https://github.com/%s/releases/download/%s/%s', ...
-                    Terminal.GITHUB_REPO, tag, assetName);
+                    terminal.GITHUB_REPO, tag, assetName);
                 binaryDst = fullfile(tmpDir, assetName);
                 websave(binaryDst, binaryURL);
 
                 cmd = sprintf( ...
                     '"%s" verify-artifact --provenance-path "%s" --source-uri github.com/%s --source-tag %s "%s" 2>&1', ...
-                    verifierBin, provenancePath, Terminal.GITHUB_REPO, tag, binaryDst);
+                    verifierBin, provenancePath, terminal.GITHUB_REPO, tag, binaryDst);
                 [st, output] = system(cmd);
                 if st == 0
                     fprintf('PASS: SLSA provenance verification succeeded.\n');
@@ -1232,9 +1232,9 @@ classdef Terminal < handle
         end
 
         function results = test()
-            %TEST Run the Terminal test suite and produce a report.
+            %TEST Run the terminal test suite and produce a report.
             %
-            %   Terminal.test()
+            %   terminal.test()
             %
             %   Discovers and runs all test classes in the toolbox tests/
             %   folder. Unit tests run everywhere; integration tests that
@@ -1244,11 +1244,11 @@ classdef Terminal < handle
             %   Produces an HTML report in a test-results/ folder and
             %   prints a summary to the command window.
             %
-            %   results = Terminal.test()   — also returns the TestResult array
+            %   results = terminal.test()   — also returns the TestResult array
 
-            testsDir = fullfile(Terminal.toolboxDir(), 'tests');
+            testsDir = fullfile(terminal.toolboxDir(), 'tests');
 
-            fprintf('\n<strong>Terminal Test Suite v%s</strong>\n\n', Terminal.version());
+            fprintf('\n<strong>Terminal Test Suite v%s</strong>\n\n', terminal.version());
 
             % Discover all test classes.
             suite = matlab.unittest.TestSuite.fromFolder(testsDir);
@@ -1318,7 +1318,7 @@ classdef Terminal < handle
         end
 
         function p = toolboxDir()
-            %TOOLBOXDIR Return the directory containing Terminal.m.
+            %TOOLBOXDIR Return the directory containing terminal.m.
             %   All runtime artifacts (extracted assets, downloaded binaries,
             %   agentic toolkits) are stored relative to this directory.
             p = fileparts(mfilename('fullpath'));
@@ -1331,10 +1331,10 @@ classdef Terminal < handle
             %   server binary path for command pre-population.
 
             % Step 1: Ensure the toolkit is installed.
-            Terminal.ensureMCPToolkit();
+            terminal.ensureMCPToolkit();
 
             % Step 2: Ensure the server binary is available.
-            serverBin = Terminal.ensureMCPServerBinary();
+            serverBin = terminal.ensureMCPServerBinary();
 
             % Step 3: Share the session.
             try
@@ -1365,26 +1365,26 @@ classdef Terminal < handle
             end
 
             % Toolkit not found — offer to install.
-            fprintf('%s is required for MCP=true.\n', Terminal.MCP_TOOLKIT_NAME);
+            fprintf('%s is required for MCP=true.\n', terminal.MCP_TOOLKIT_NAME);
             reply = input('Download and install it now? (y/n) [y]: ', 's');
             if isempty(reply), reply = 'y'; end
             if ~strcmpi(reply, 'y')
                 error('Terminal:MCPToolkitNotInstalled', ...
                     ['%s is required for MCP=true.\n\n' ...
                      'Install manually from:\n  <a href="%s">%s</a>'], ...
-                    Terminal.MCP_TOOLKIT_NAME, ...
-                    Terminal.MCP_TOOLKIT_URL, Terminal.MCP_TOOLKIT_URL);
+                    terminal.MCP_TOOLKIT_NAME, ...
+                    terminal.MCP_TOOLKIT_URL, terminal.MCP_TOOLKIT_URL);
             end
 
-            release = Terminal.fetchMCPRelease();
-            mltbxURL = Terminal.findMCPAsset(release, '.mltbx');
+            release = terminal.fetchMCPRelease();
+            mltbxURL = terminal.findMCPAsset(release, '.mltbx');
             if isempty(mltbxURL)
                 error('Terminal:MCPDownloadFailed', ...
                     'No .mltbx asset found in release %s.', release.tag_name);
             end
 
             tmpFile = fullfile(tempdir, 'MATLABMCPCoreServerToolkit.mltbx');
-            fprintf('Downloading %s %s...\n', Terminal.MCP_TOOLKIT_NAME, release.tag_name);
+            fprintf('Downloading %s %s...\n', terminal.MCP_TOOLKIT_NAME, release.tag_name);
             try
                 websave(tmpFile, mltbxURL);
             catch me
@@ -1400,22 +1400,22 @@ classdef Terminal < handle
             end
             delete(tmpFile);
             rehash toolboxcache;
-            fprintf('%s %s installed.\n\n', Terminal.MCP_TOOLKIT_NAME, release.tag_name);
+            fprintf('%s %s installed.\n\n', terminal.MCP_TOOLKIT_NAME, release.tag_name);
         end
 
         function serverBin = ensureMCPServerBinary()
             %ENSUREMCPSERVERBINARY Find or download the MCP server binary.
 
-            binaryName = Terminal.MCP_SERVER_BINARY;
+            binaryName = terminal.MCP_SERVER_BINARY;
             if ispc
                 binaryName = [binaryName '.exe'];
             end
 
             % Check our managed install location first.
-            installDir = fullfile(Terminal.toolboxDir(), 'bin');
+            installDir = fullfile(terminal.toolboxDir(), 'bin');
             serverBin = fullfile(installDir, binaryName);
             if isfile(serverBin)
-                if Terminal.checkMCPServerVersion(serverBin)
+                if terminal.checkMCPServerVersion(serverBin)
                     return;
                 end
                 % Version too old — fall through to download.
@@ -1432,7 +1432,7 @@ classdef Terminal < handle
                 % Take only the first line (where may return multiple).
                 lines = splitlines(found);
                 found = lines{1};
-                if Terminal.checkMCPServerVersion(found)
+                if terminal.checkMCPServerVersion(found)
                     serverBin = found;
                     return;
                 end
@@ -1455,7 +1455,7 @@ classdef Terminal < handle
                 error('Terminal:MCPBinaryNotFound', ...
                     ['MCP server binary is required for MCP=true.\n\n' ...
                      'Download from:\n  <a href="%s">%s</a>'], ...
-                    Terminal.MCP_TOOLKIT_URL, Terminal.MCP_TOOLKIT_URL);
+                    terminal.MCP_TOOLKIT_URL, terminal.MCP_TOOLKIT_URL);
             end
 
             % Determine platform asset name.
@@ -1470,9 +1470,9 @@ classdef Terminal < handle
                         'Unsupported platform: %s', arch);
             end
 
-            release = Terminal.fetchMCPRelease();
-            assetName = [Terminal.MCP_SERVER_BINARY assetSuffix];
-            binaryURL = Terminal.findMCPAsset(release, assetName);
+            release = terminal.fetchMCPRelease();
+            assetName = [terminal.MCP_SERVER_BINARY assetSuffix];
+            binaryURL = terminal.findMCPAsset(release, assetName);
             if isempty(binaryURL)
                 error('Terminal:MCPDownloadFailed', ...
                     'No binary asset "%s" found in release %s.', assetName, release.tag_name);
@@ -1483,7 +1483,7 @@ classdef Terminal < handle
                 mkdir(installDir);
             end
             fprintf('Downloading %s %s for %s...\n', ...
-                Terminal.MCP_SERVER_BINARY, release.tag_name, arch);
+                terminal.MCP_SERVER_BINARY, release.tag_name, arch);
             try
                 websave(serverBin, binaryURL);
             catch me
@@ -1522,11 +1522,11 @@ classdef Terminal < handle
                     return;
                 end
                 ver = tokens{1};
-                if Terminal.compareVersions(ver, Terminal.MCP_MIN_SERVER_VERSION) >= 0
+                if terminal.compareVersions(ver, terminal.MCP_MIN_SERVER_VERSION) >= 0
                     ok = true;
                 else
                     fprintf('MCP server binary at "%s" is version %s.\n', serverBin, ver);
-                    fprintf('Minimum required version is %s.\n\n', Terminal.MCP_MIN_SERVER_VERSION);
+                    fprintf('Minimum required version is %s.\n\n', terminal.MCP_MIN_SERVER_VERSION);
                 end
             catch
                 ok = true;  % Don't block on unexpected errors.
@@ -1553,13 +1553,13 @@ classdef Terminal < handle
             end
             try
                 opts = weboptions('ContentType', 'json', 'Timeout', 10);
-                release = webread(Terminal.MCP_GITHUB_API, opts);
+                release = webread(terminal.MCP_GITHUB_API, opts);
                 cachedRelease = release;
             catch me
                 error('Terminal:MCPDownloadFailed', ...
                     ['Could not reach GitHub to check for the MCP Core Server.\n' ...
                      '  %s\n\nInstall manually from:\n  <a href="%s">%s</a>'], ...
-                    me.message, Terminal.MCP_TOOLKIT_URL, Terminal.MCP_TOOLKIT_URL);
+                    me.message, terminal.MCP_TOOLKIT_URL, terminal.MCP_TOOLKIT_URL);
             end
         end
 
@@ -1590,10 +1590,10 @@ classdef Terminal < handle
                 error('Terminal:InvalidAgentOptions', 'AgentOptions must have a Toolkits field.');
             end
             agent = string(opts.Agent);
-            if ~ismember(agent, Terminal.AGENTIC_SUPPORTED_AGENTS)
+            if ~ismember(agent, terminal.AGENTIC_SUPPORTED_AGENTS)
                 error('Terminal:InvalidAgentOptions', ...
                     'Unsupported agent "%s".\nSupported: %s', ...
-                    agent, strjoin(Terminal.AGENTIC_SUPPORTED_AGENTS, ", "));
+                    agent, strjoin(terminal.AGENTIC_SUPPORTED_AGENTS, ", "));
             end
             toolkits = string(opts.Toolkits);
             valid = ["matlab", "simulink"];
@@ -1612,7 +1612,7 @@ classdef Terminal < handle
             fprintf('======================\n\n');
 
             % --- Agent selection ---
-            agents = Terminal.AGENTIC_SUPPORTED_AGENTS;
+            agents = terminal.AGENTIC_SUPPORTED_AGENTS;
             labels = ["Claude Code", "Sourcegraph Amp", "Gemini CLI", ...
                       "Cursor (untested)", "OpenAI Codex (untested)", ...
                       "GitHub Copilot (untested)"];
@@ -1653,11 +1653,11 @@ classdef Terminal < handle
             fprintf('  Selected: %s\n\n', strjoin(toolkits, ", "));
 
             opts = struct('Agent', agent, 'Toolkits', {toolkits});
-            Terminal.setAgentOptions(opts);
+            terminal.setAgentOptions(opts);
 
-            fprintf('Preferences saved. Run Terminal.resetAgentOptions() to reconfigure.\n');
+            fprintf('Preferences saved. Run terminal.resetAgentOptions() to reconfigure.\n');
             fprintf('For future use, skip the wizard with:\n');
-            fprintf('  Terminal(Agentic=true, AgentOptions=struct(''Agent'',"%s",''Toolkits'',[%s]))\n\n', ...
+            fprintf('  terminal(Agentic=true, AgentOptions=struct(''Agent'',"%s",''Toolkits'',[%s]))\n\n', ...
                 agent, strjoin("""" + toolkits + """", ","));
         end
 
@@ -1669,7 +1669,7 @@ classdef Terminal < handle
                 forceUpdate (1,1) logical = false
             end
 
-            baseDir = fullfile(Terminal.toolboxDir(), 'bin', Terminal.AGENTIC_INSTALL_DIR);
+            baseDir = fullfile(terminal.toolboxDir(), 'bin', terminal.AGENTIC_INSTALL_DIR);
             toolkitPath = fullfile(baseDir, toolkit);
 
             if isfolder(toolkitPath) && ~forceUpdate
@@ -1678,10 +1678,10 @@ classdef Terminal < handle
 
             switch toolkit
                 case "matlab"
-                    repo = Terminal.AGENTIC_MATLAB_REPO;
+                    repo = terminal.AGENTIC_MATLAB_REPO;
                     displayName = 'MATLAB Agentic Toolkit';
                 case "simulink"
-                    repo = Terminal.AGENTIC_SIMULINK_REPO;
+                    repo = terminal.AGENTIC_SIMULINK_REPO;
                     displayName = 'Simulink Agentic Toolkit';
             end
 
@@ -1793,7 +1793,7 @@ classdef Terminal < handle
 
             % Start with Terminal's editor tools.
             editorToolsFile = fullfile( ...
-                fileparts(which('TerminalMCPTools.matlab_editor_list')), ...
+                fileparts(which('terminaltools.matlab_editor_list')), ...
                 'matlab-editor-tools.json');
             merged = jsondecode(fileread(editorToolsFile));
 
@@ -1831,8 +1831,8 @@ classdef Terminal < handle
                 end
             end
 
-            % Write merged file alongside Terminal.m.
-            mergedFile = fullfile(Terminal.toolboxDir(), 'merged-extension-tools.json');
+            % Write merged file alongside terminal.m.
+            mergedFile = fullfile(terminal.toolboxDir(), 'merged-extension-tools.json');
             fid = fopen(mergedFile, 'w');
             fwrite(fid, jsonencode(merged, 'PrettyPrint', true));
             fclose(fid);
@@ -1858,34 +1858,34 @@ classdef Terminal < handle
             switch agent
                 case "claude"
                     argsStr = strjoin(quotedArgs, ' ');
-                    cmd = Terminal.buildClaudeSetupScript( ...
+                    cmd = terminal.buildClaudeSetupScript( ...
                         serverBin, argsStr, toolkitPaths);
 
                 case "codex"
                     argsStr = strjoin(quotedArgs, ' ');
                     cmd = sprintf('codex mcp add matlab -- "%s" %s', serverBin, argsStr);
-                    Terminal.installGlobalSkills(toolkitPaths);
+                    terminal.installGlobalSkills(toolkitPaths);
 
                 case "copilot"
-                    Terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
-                    Terminal.installGlobalSkills(toolkitPaths);
+                    terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
+                    terminal.installGlobalSkills(toolkitPaths);
                     cmd = '';
 
                 case "gemini"
-                    Terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
-                    Terminal.installGlobalSkills(toolkitPaths);
+                    terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
+                    terminal.installGlobalSkills(toolkitPaths);
                     cmd = '';
 
                 case "cursor"
-                    Terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
+                    terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
                     cmd = '';
 
                 case "amp"
-                    Terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
+                    terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
                     cmd = '';
             end
 
-            Terminal.printSetupSummary(agent, toolkitPaths);
+            terminal.printSetupSummary(agent, toolkitPaths);
 
             if isempty(cmd)
                 fprintf('Restart %s to activate.\n\n', agent);
@@ -1908,16 +1908,16 @@ classdef Terminal < handle
             % Determine config file path and MCP servers key per agent.
             switch agent
                 case "copilot"
-                    configFile = fullfile(Terminal.userHome(), '.vscode', 'settings.json');
+                    configFile = fullfile(terminal.userHome(), '.vscode', 'settings.json');
                     mcpKey = 'mcp.servers';
                 case "gemini"
-                    configFile = fullfile(Terminal.userHome(), '.gemini', 'settings.json');
+                    configFile = fullfile(terminal.userHome(), '.gemini', 'settings.json');
                     mcpKey = 'mcpServers';
                 case "cursor"
-                    configFile = fullfile(Terminal.userHome(), '.cursor', 'mcp.json');
+                    configFile = fullfile(terminal.userHome(), '.cursor', 'mcp.json');
                     mcpKey = 'mcpServers';
                 case "amp"
-                    configFile = fullfile(Terminal.userHome(), '.config', 'amp', 'settings.json');
+                    configFile = fullfile(terminal.userHome(), '.config', 'amp', 'settings.json');
                     mcpKey = 'amp.mcpServers';
             end
 
@@ -1943,12 +1943,12 @@ classdef Terminal < handle
 
             % Patch the MCP servers key with the matlab entry.
             mcpServersJSON = jsonencode(struct('matlab', mcpEntry), 'PrettyPrint', true);
-            rawJSON = Terminal.patchJsonKey(rawJSON, mcpKey, mcpServersJSON);
+            rawJSON = terminal.patchJsonKey(rawJSON, mcpKey, mcpServersJSON);
 
             % Amp-specific: write mcpPermissions and skills path.
             if agent == "amp"
-                rawJSON = Terminal.patchAmpPermissions(rawJSON, serverBin);
-                rawJSON = Terminal.patchAmpSkillsPath(rawJSON, toolkitPaths);
+                rawJSON = terminal.patchAmpPermissions(rawJSON, serverBin);
+                rawJSON = terminal.patchAmpSkillsPath(rawJSON, toolkitPaths);
             end
 
             fid = fopen(configFile, 'w');
@@ -1985,7 +1985,7 @@ classdef Terminal < handle
                 '      }\n' ...
                 '    }\n' ...
                 '  ]'], mcpCommand);
-            json = Terminal.patchJsonKey(json, 'amp.mcpPermissions', mcpPermsJSON);
+            json = terminal.patchJsonKey(json, 'amp.mcpPermissions', mcpPermsJSON);
         end
 
         function json = patchAmpSkillsPath(json, toolkitPaths)
@@ -2002,7 +2002,7 @@ classdef Terminal < handle
                 sep = ':';
                 if ispc, sep = ';'; end
                 skillsPathStr = strjoin(skillsPaths, sep);
-                json = Terminal.patchJsonKey(json, 'amp.skills.path', ...
+                json = terminal.patchJsonKey(json, 'amp.skills.path', ...
                     jsonencode(char(skillsPathStr)));
             end
         end
@@ -2026,7 +2026,7 @@ classdef Terminal < handle
                 % Find the start of the value (skip whitespace).
                 valStart = regexp(json(colonIdx+1:end), '\S', 'start', 'once') + colonIdx;
                 % Find the end of the value.
-                valEnd = Terminal.findJsonValueEnd(json, valStart);
+                valEnd = terminal.findJsonValueEnd(json, valStart);
                 % Replace the value.
                 json = [json(1:valStart-1) valueJSON json(valEnd+1:end)];
             else
@@ -2129,21 +2129,10 @@ classdef Terminal < handle
                     continue;
                 end
 
-                switch tkName
-                    case 'matlab'
-                        repoURL = sprintf('https://github.com/%s', ...
-                            Terminal.AGENTIC_MATLAB_REPO);
-                    case 'simulink'
-                        repoURL = sprintf('https://github.com/%s', ...
-                            Terminal.AGENTIC_SIMULINK_REPO);
-                    otherwise
-                        continue;
-                end
-
                 lines{end+1} = ''; %#ok<*AGROW>
                 lines{end+1} = sprintf('echo Installing %s plugins...', tkName);
                 lines{end+1} = sprintf( ...
-                    'claude plugin marketplace add "%s"', repoURL);
+                    'claude plugin marketplace add "%s"', tkPath);
 
                 for j = 1:numel(mp.plugins)
                     lines{end+1} = sprintf( ...
@@ -2161,7 +2150,7 @@ classdef Terminal < handle
             lines{end+1} = 'echo Setup complete. Start a new Claude Code session to use MATLAB skills.';
 
             % Write script to toolbox scripts directory.
-            scriptsDir = fullfile(Terminal.toolboxDir(), 'scripts');
+            scriptsDir = fullfile(terminal.toolboxDir(), 'scripts');
             if ~isfolder(scriptsDir)
                 mkdir(scriptsDir);
             end
@@ -2195,7 +2184,7 @@ classdef Terminal < handle
             %   the toolkit so agents like Codex, Copilot, and Gemini can
             %   discover them globally.
 
-            home = Terminal.userHome();
+            home = terminal.userHome();
             skillsDir = fullfile(home, '.agents', 'skills');
 
             if ~isfolder(skillsDir)
@@ -2252,7 +2241,7 @@ classdef Terminal < handle
             %PRINTSETUPSUMMARY Print what was configured and how to undo.
 
             agent = string(agent);
-            home = Terminal.userHome();
+            home = terminal.userHome();
 
             fprintf('\nTo undo this setup:\n');
 
@@ -2283,17 +2272,17 @@ classdef Terminal < handle
 
                 case "codex"
                     fprintf('  codex mcp remove matlab\n');
-                    Terminal.printSkillsUndoHint(home);
+                    terminal.printSkillsUndoHint(home);
 
                 case "copilot"
                     fprintf('  Remove "matlab" from "mcp.servers" in:\n');
                     fprintf('    %s\n', fullfile(home, '.vscode', 'settings.json'));
-                    Terminal.printSkillsUndoHint(home);
+                    terminal.printSkillsUndoHint(home);
 
                 case "gemini"
                     fprintf('  Remove "matlab" from "mcpServers" in:\n');
                     fprintf('    %s\n', fullfile(home, '.gemini', 'settings.json'));
-                    Terminal.printSkillsUndoHint(home);
+                    terminal.printSkillsUndoHint(home);
 
                 case "cursor"
                     fprintf('  Remove "matlab" from "mcpServers" in:\n');
@@ -2336,7 +2325,7 @@ classdef Terminal < handle
             %REGISTRY Persistent store for tracking Terminal instances.
             persistent instances
             if isempty(instances)
-                instances = Terminal.empty;
+                instances = terminal.empty;
             end
             switch action
                 case 'add'
@@ -2349,14 +2338,14 @@ classdef Terminal < handle
                     result = instances;
                     return;
             end
-            result = Terminal.empty;
+            result = terminal.empty;
         end
 
         function htmlDir = extractWebAssets()
             %EXTRACTWEBASSETS Extract web assets from web_assets.mat to a cache dir.
             %   packageToolbox drops .html/.css/.js files, so we bundle them
             %   in a .mat file and extract at runtime.
-            cacheRoot = Terminal.toolboxDir();
+            cacheRoot = terminal.toolboxDir();
             cacheDir = fullfile(cacheRoot, 'html');
             stampFile = fullfile(cacheRoot, '.extracted');
 
@@ -2388,7 +2377,7 @@ classdef Terminal < handle
             if isfolder(cacheDir), rmdir(cacheDir, 's'); end
             if isfolder(serverBinDir), rmdir(serverBinDir, 's'); end
 
-            Terminal.cleanupLegacyPrefdir();
+            terminal.cleanupLegacyPrefdir();
 
             fprintf('Extracting Terminal assets to:\n  %s\n', cacheRoot);
 
@@ -2438,21 +2427,21 @@ classdef Terminal < handle
         end
 
         function binaryPath = findBinary()
-            binaryName = Terminal.SERVER_BINARY_NAME;
+            binaryName = terminal.SERVER_BINARY_NAME;
             if ispc
                 binaryName = [binaryName, '.exe'];
             end
 
             % Check dist/<arch>/ directory (development builds).
             arch = computer('arch');
-            candidate = fullfile(fileparts(Terminal.toolboxDir()), 'dist', arch, binaryName);
+            candidate = fullfile(fileparts(terminal.toolboxDir()), 'dist', arch, binaryName);
             if isfile(candidate)
                 binaryPath = candidate;
                 return;
             end
 
             % Check toolbox bin/ directory (extracted from web_assets.mat).
-            candidate = fullfile(Terminal.toolboxDir(), 'bin', 'matlab-terminal-server', arch, binaryName);
+            candidate = fullfile(terminal.toolboxDir(), 'bin', 'matlab-terminal-server', arch, binaryName);
             if isfile(candidate)
                 binaryPath = candidate;
                 return;
@@ -2539,7 +2528,7 @@ classdef Terminal < handle
             end
 
             % Check managed install location first.
-            installDir = fullfile(Terminal.toolboxDir(), 'bin');
+            installDir = fullfile(terminal.toolboxDir(), 'bin');
             candidate = fullfile(installDir, binaryName);
             if isfile(candidate)
                 verifierBin = candidate;
@@ -2636,7 +2625,7 @@ classdef Terminal < handle
             %   Uses the /releases/latest endpoint, which excludes
             %   pre-releases and drafts.
             url = sprintf('https://api.github.com/repos/%s/releases/latest', ...
-                Terminal.GITHUB_REPO);
+                terminal.GITHUB_REPO);
             try
                 opts = weboptions('ContentType', 'json', 'Timeout', 10);
                 release = webread(url, opts);
@@ -2655,7 +2644,7 @@ classdef Terminal < handle
                 tag = version;
             end
             url = sprintf('https://api.github.com/repos/%s/releases/tags/%s', ...
-                Terminal.GITHUB_REPO, tag);
+                terminal.GITHUB_REPO, tag);
             try
                 opts = weboptions('ContentType', 'json', 'Timeout', 10);
                 release = webread(url, opts);
@@ -2689,7 +2678,7 @@ classdef Terminal < handle
                 end
             end
             if isempty(mltbxURL)
-                v = Terminal.tagToVersion(release.tag_name);
+                v = terminal.tagToVersion(release.tag_name);
                 error('Terminal:UpdateFailed', ...
                     'No .mltbx file found in release %s.', v);
             end

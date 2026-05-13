@@ -24,30 +24,30 @@ On first launch, bundled assets are automatically extracted to a local cache. No
 
 ```matlab
 % Open a docked terminal
-t = Terminal();
+t = terminal();
 
 % Open with a custom title
-t = Terminal(Name="Build");
+t = terminal(Name="Build");
 
 % Open in a floating window
-t = Terminal(WindowStyle="normal");
+t = terminal(WindowStyle="normal");
 
 % Open with a specific shell
-t = Terminal(Shell="zsh");            % Linux/macOS
-t = Terminal(Shell="powershell.exe"); % Windows
+t = terminal(Shell="zsh");            % Linux/macOS
+t = terminal(Shell="powershell.exe"); % Windows
 
 % Open with a color theme
-t = Terminal(Theme="dracula");
-t = Terminal(Theme="solarized-light");
+t = terminal(Theme="dracula");
+t = terminal(Theme="solarized-light");
 
 % Change theme on the fly
 t.Theme = "monokai";
 
 % List all running terminals
-Terminal.list()
+terminal.list()
 
 % Close all running terminals
-Terminal.closeAll()
+terminal.closeAll()
 
 % Close a single terminal
 delete(t);
@@ -56,16 +56,16 @@ delete(t);
 t.Shell
 
 % Check the installed version
-Terminal.version()
+terminal.version()
 
 % Set up AI agent integration with MathWorks toolkits
-t = Terminal(Agentic=true);
+t = terminal(Agentic=true);
 
 % Check for updates and install the latest version from GitHub
-Terminal.update()
+terminal.update()
 
 % Run the built-in test suite
-Terminal.test()
+terminal.test()
 ```
 
 | Shortcut     | Action                     |
@@ -79,7 +79,7 @@ Terminal.test()
 Terminal can set up AI coding agents to work with MATLAB and Simulink via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). This allows agents like Claude, Codex, Copilot, Gemini, Cursor, and Amp to evaluate MATLAB code, run files, interact with the editor, and build Simulink models.
 
 ```matlab
-t = Terminal(Agentic=true);
+t = terminal(Agentic=true);
 ```
 
 On first run, a setup wizard prompts you to select an agent and toolkits. Preferences are saved for subsequent runs.
@@ -118,24 +118,24 @@ Terminal bundles additional MCP tools that give AI agents read-only access to th
 Pass `AgentOptions` to skip the interactive wizard:
 
 ```matlab
-t = Terminal(Agentic=true, AgentOptions=struct('Agent',"claude",'Toolkits',["matlab"]));
-t = Terminal(Agentic=true, AgentOptions=struct('Agent',"gemini",'Toolkits',["matlab","simulink"]));
+t = terminal(Agentic=true, AgentOptions=struct('Agent',"claude",'Toolkits',["matlab"]));
+t = terminal(Agentic=true, AgentOptions=struct('Agent',"gemini",'Toolkits',["matlab","simulink"]));
 ```
 
 Save preferences so future calls use the same options:
 
 ```matlab
-Terminal.setAgentOptions(struct('Agent',"claude",'Toolkits',["matlab"]));
-t = Terminal(Agentic=true);  % uses saved options
+terminal.setAgentOptions(struct('Agent',"claude",'Toolkits',["matlab"]));
+t = terminal(Agentic=true);  % uses saved options
 ```
 
 ### Managing Toolkits
 
 ```matlab
-Terminal.updateAgenticToolkit()            % update all installed toolkits
-Terminal.updateAgenticToolkit("matlab")    % update MATLAB toolkit only
-Terminal.updateAgenticToolkit("simulink")  % update Simulink toolkit only
-Terminal.resetAgentOptions()               % clear preferences, re-run wizard
+terminal.updateAgenticToolkit()            % update all installed toolkits
+terminal.updateAgenticToolkit("matlab")    % update MATLAB toolkit only
+terminal.updateAgenticToolkit("simulink")  % update Simulink toolkit only
+terminal.resetAgentOptions()               % clear preferences, re-run wizard
 ```
 
 ### Requirements
@@ -145,17 +145,17 @@ Terminal.resetAgentOptions()               % clear preferences, re-run wizard
 
 ### How It Works
 
-`Terminal(Agentic=true)` shares the MATLAB Embedded Connector so the MCP Core Server can connect to the running MATLAB session. It downloads the selected agentic toolkits, merges their tool definitions with the bundled editor tools, and registers the MCP server with your chosen AI agent. For CLI agents (Claude, Codex), the registration command is pre-populated in the terminal. For config-file agents (Copilot, Gemini, Cursor, Amp), the config is written directly.
+`terminal(Agentic=true)` shares the MATLAB Embedded Connector so the MCP Core Server can connect to the running MATLAB session. It downloads the selected agentic toolkits, merges their tool definitions with the bundled editor tools, and registers the MCP server with your chosen AI agent. For CLI agents (Claude, Codex), the registration command is pre-populated in the terminal. For config-file agents (Copilot, Gemini, Cursor, Amp), the config is written directly.
 
 ## Updating
 
 ```matlab
-Terminal.update()
+terminal.update()
 ```
 
 This queries GitHub for the latest release, displays a version comparison, and prompts for confirmation before upgrading. The update process closes all open terminals, uninstalls the current version, clears cached assets, downloads the new `.mltbx`, and installs it.
 
-![Terminal.update() output](images/update.png)
+![terminal.update() output](images/update.png)
 
 ## Uninstalling
 
@@ -167,7 +167,7 @@ matlab.addons.uninstall('Terminal')
 
 - **Full terminal emulator** — PTY-based with 256-color support, cursor movement, and escape sequences. Interactive tools like `vim`, `htop`, and `ssh` work correctly.
 - **Cross-platform** — Linux, macOS, and Windows. Uses `creack/pty` on Unix and ConPTY on Windows.
-- **Configurable shell** — Specify a shell with `Terminal(Shell="zsh")`. Defaults to `$SHELL` on Unix, `%COMSPEC%` on Windows.
+- **Configurable shell** — Specify a shell with `terminal(Shell="zsh")`. Defaults to `$SHELL` on Unix, `%COMSPEC%` on Windows.
 - **Tabbed interface** — Open multiple terminal sessions in a single panel. Create, close, and switch tabs.
 
   ![Multiple tabs](images/tabs.png)
@@ -180,11 +180,11 @@ matlab.addons.uninstall('Terminal')
   | ![Light theme](images/theme-light.png) | ![Dark theme](images/theme-dark.png) |
 
 - **Copy and paste** — Ctrl+Shift+C to copy, Ctrl+Shift+V to paste.
-- **Instance management** — `Terminal.list()` returns handles to all running terminals. `Terminal.closeAll()` closes them all.
-- **Self-updating** — `Terminal.update()` checks GitHub for new releases and walks through the upgrade interactively.
+- **Instance management** — `terminal.list()` returns handles to all running terminals. `terminal.closeAll()` closes them all.
+- **Self-updating** — `terminal.update()` checks GitHub for new releases and walks through the upgrade interactively.
 - **Auto-cleanup** — Closing the last tab closes the window. The server process is terminated when the terminal is deleted or MATLAB exits. An idle timeout acts as a safety net.
 - **Environment variables** — Terminal sessions have `MATLAB_PID` and `MATLAB_ROOT` set, allowing CLI tools to discover the running MATLAB instance.
-- **AI agent integration** — `Terminal(Agentic=true)` sets up AI coding agents (Claude, Codex, Copilot, Gemini, Cursor, Amp) to work with MATLAB and Simulink via MCP. See [AI Agent Integration](#ai-agent-integration) for details.
+- **AI agent integration** — `terminal(Agentic=true)` sets up AI coding agents (Claude, Codex, Copilot, Gemini, Cursor, Amp) to work with MATLAB and Simulink via MCP. See [AI Agent Integration](#ai-agent-integration) for details.
 - **Event API (R2023a+)** — On R2023a and later, uses `sendEventToHTMLSource`/`HTMLEventReceivedFcn` for reliable keystroke delivery with no data loss. Older releases fall back to the Data channel with buffering.
 - **matlab-proxy compatible** — Works in browser-based MATLAB via [matlab-proxy](https://github.com/mathworks/matlab-proxy).
 - **Zero runtime dependencies** — No Node.js®, Python®, or Java® required. A single Go binary handles all PTY management.
@@ -213,7 +213,7 @@ By default, Terminal follows the MATLAB Desktop theme — light or dark — and 
 ### Using a Preset Theme
 
 ```matlab
-t = Terminal(Theme="dracula");
+t = terminal(Theme="dracula");
 ```
 
 Change the theme on an existing terminal:
@@ -242,7 +242,7 @@ t.Theme = "nord";
 List all available presets programmatically:
 
 ```matlab
-Terminal.themes()
+terminal.themes()
 ```
 
 ### Custom Themes
@@ -254,7 +254,7 @@ Pass a struct with color fields to define a custom theme. Only include the field
 myTheme = struct( ...
     'background',  '#1a1a2e', ...
     'foreground',  '#e0e0e0');
-t = Terminal(Theme=myTheme);
+t = terminal(Theme=myTheme);
 ```
 
 A more complete example with cursor and selection colors:
@@ -265,7 +265,7 @@ myTheme = struct( ...
     'foreground',  '#e0e0e0', ...
     'cursor',      '#ff6b6b', ...
     'selectionBackground', '#3a3a5e');
-t = Terminal(Theme=myTheme);
+t = terminal(Theme=myTheme);
 ```
 
 For full control over the ANSI color palette, include any of the 16 standard color fields. These control how programs like `ls`, `git`, and shell prompts render colored output:
@@ -292,7 +292,7 @@ myTheme = struct( ...
     'brightMagenta','#dca4ea', ...
     'brightCyan',  '#79d2da', ...
     'brightWhite', '#f0f0f0');
-t = Terminal(Theme=myTheme);
+t = terminal(Theme=myTheme);
 ```
 
 #### Supported Fields
@@ -332,11 +332,11 @@ Custom theme structs are validated when set. Terminal raises an error for:
 
 ```matlab
 % Typo in field name → error
-Terminal(Theme=struct('backgroud', '#1e1e1e'))
+terminal(Theme=struct('backgroud', '#1e1e1e'))
 % Error: Unknown theme field "backgroud". Valid fields: background, foreground, ...
 
 % Invalid color format → error
-Terminal(Theme=struct('background', 'red'))
+terminal(Theme=struct('background', 'red'))
 % Error: Theme field "background" has invalid value "red". Use '#rrggbb' hex format.
 ```
 
@@ -345,21 +345,21 @@ Terminal(Theme=struct('background', 'red'))
 Set a default theme that applies to all new terminals and persists across MATLAB sessions:
 
 ```matlab
-Terminal.setDefaultTheme("dracula")
+terminal.setDefaultTheme("dracula")
 ```
 
 New terminals use this theme unless overridden with the `Theme` argument:
 
 ```matlab
-t1 = Terminal();                  % uses "dracula"
-t2 = Terminal(Theme="nord");      % overrides to "nord"
+t1 = terminal();                  % uses "dracula"
+t2 = terminal(Theme="nord");      % overrides to "nord"
 ```
 
 Query and reset the default:
 
 ```matlab
-Terminal.getDefaultTheme()        % returns "dracula"
-Terminal.setDefaultTheme("auto")  % reset to follow MATLAB theme
+terminal.getDefaultTheme()        % returns "dracula"
+terminal.setDefaultTheme("auto")  % reset to follow MATLAB theme
 ```
 
 ## Developer Guide
@@ -369,12 +369,12 @@ Terminal.setDefaultTheme("auto")  % reset to follow MATLAB theme
 ```
 matlab-terminal/
 ├── toolbox/                        # Toolbox source (becomes .mltbx content)
-│   ├── Terminal.m                  # Main MATLAB class
-│   ├── TerminalVersion.m          # Version string (stamped at build time)
+│   ├── terminal.m                  # Main MATLAB class
+│   ├── terminalVersion.m          # Version string (stamped at build time)
 │   ├── openTerminal.m              # Launcher for Apps tab
 │   ├── +internal/                  # Internal package (not user-facing)
 │   │   └── Themes.m               # Theme presets, validation, and resolution
-│   ├── +TerminalMCPTools/          # MCP extension tools for AI agent access
+│   ├── +terminaltools/          # MCP extension tools for AI agent access
 │   │   ├── matlab-editor-tools.json  # Tool definitions for --extension-file
 │   │   ├── matlab_editor_list.m
 │   │   ├── matlab_editor_active.m
@@ -423,7 +423,7 @@ matlab-terminal/
 ### Architecture
 
 ```
-MATLAB (Terminal.m)  ←— Event API (R2023a+) / Data channel —→  uihtml (xterm.js)
+MATLAB (terminal.m)  ←— Event API (R2023a+) / Data channel —→  uihtml (xterm.js)
         │
         │  HTTP polling (100ms)
         ▼
@@ -462,10 +462,10 @@ See [DESIGN.md](DESIGN.md) for detailed architecture decisions and security anal
 
 3. **Launch**:
    ```matlab
-   Terminal()
+   terminal()
    ```
 
-When running from source, `Terminal.m` uses `html/` directly and finds the server binary in `dist/<arch>/`. No `.mat` extraction is needed.
+When running from source, `terminal.m` uses `html/` directly and finds the server binary in `dist/<arch>/`. No `.mat` extraction is needed.
 
 ### Testing
 
@@ -476,7 +476,7 @@ Terminal ships with a comprehensive test suite that covers both the Go server an
 After installing `Terminal.mltbx`, run the full test suite from the MATLAB Command Window:
 
 ```matlab
-Terminal.test()
+terminal.test()
 ```
 
 This discovers and runs all test classes, prints a verbose summary to the command window, and generates an HTML report in a `test-results/` folder in the current directory:
@@ -498,7 +498,7 @@ Report: test-results/index.html
 To capture the results programmatically:
 
 ```matlab
-results = Terminal.test();
+results = terminal.test();
 disp(table(results))
 ```
 
@@ -523,7 +523,7 @@ For developers working from a git clone:
 3. Run the test suite:
 
    ```matlab
-   Terminal.test()
+   terminal.test()
    ```
 
    Or run individual test classes:
@@ -575,7 +575,7 @@ Output: `dist/Terminal.mltbx`
 2. **Bundles assets** — `build_assets.m` reads `html/` files and all server binaries from `dist/<arch>/`, packing them as byte arrays into `toolbox/web_assets.mat`. This works around `packageToolbox` silently dropping `.html`, `.css`, `.js`, and binary files.
 3. **Packages toolbox** — `packageToolbox` creates the `.mltbx` from `toolbox/`, which includes the `.mat` alongside `.m` files, the Getting Started guide, and the toolbox icon.
 
-At runtime, `Terminal.m` extracts assets from `web_assets.mat` into the toolbox directory (`html/` and `bin/matlab-terminal-server/<arch>/`) on first launch (version-stamped to avoid re-extraction). Only the binary for the current platform is extracted.
+At runtime, `terminal.m` extracts assets from `web_assets.mat` into the toolbox directory (`html/` and `bin/matlab-terminal-server/<arch>/`) on first launch (version-stamped to avoid re-extraction). Only the binary for the current platform is extracted.
 
 ### CI/CD Pipeline (GitHub Actions)
 
@@ -596,7 +596,7 @@ git push origin v0.7.0
 
 > **Note**: The `matlab-actions/setup-matlab` action requires a [MATLAB batch licensing token](https://www.mathworks.com/help/cloudcenter/ug/matlab-batch-licensing-tokens.html). MathWorks® provides free CI licenses for public repositories.
 
-The resulting `.mltbx` is a single cross-platform artifact. At install time, `Terminal.m` extracts the correct binary for the user's platform based on `computer('arch')`.
+The resulting `.mltbx` is a single cross-platform artifact. At install time, `terminal.m` extracts the correct binary for the user's platform based on `computer('arch')`.
 
 ## License
 

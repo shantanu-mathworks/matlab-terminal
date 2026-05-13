@@ -34,15 +34,15 @@ websave(mltbxFile, url);
 
 disp("Download complete."); %[output:6dc9bd10]
 
-disp("Installing Terminal..."); %[output:60ebb475]
+disp("Installing terminal..."); %[output:60ebb475]
 matlab.addons.install(mltbxFile);
 delete(mltbxFile);
-disp("Terminal " + Terminal.version() + " installed successfully."); %[output:94338645]
+disp("Terminal " + terminal.version() + " installed successfully."); %[output:94338645]
 %%
 %[text] ## Open a Terminal
-edit(fullfile(fileparts(which("Terminal.m")), "doc","GettingStarted.mlx"))
+edit(fullfile(fileparts(which("terminal.m")), "doc","GettingStarted.mlx"))
 cd(userpath)
-Terminal(); %[output:2d5a62c8]
+terminal(); %[output:2d5a62c8]
 
 %[appendix]{"version":"1.0"}
 %---
@@ -62,7 +62,7 @@ Terminal(); %[output:2d5a62c8]
 %   data: {"dataType":"text","outputData":{"text":"Download complete.\n","truncated":false}}
 %---
 %[output:60ebb475]
-%   data: {"dataType":"text","outputData":{"text":"Installing Terminal...\n","truncated":false}}
+%   data: {"dataType":"text","outputData":{"text":"Installing terminal...\n","truncated":false}}
 %---
 %[output:94338645]
 %   data: {"dataType":"text","outputData":{"text":"Terminal 0.13.2 installed successfully.\n","truncated":false}}

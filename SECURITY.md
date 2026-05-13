@@ -41,7 +41,7 @@ Every release artifact is built in GitHub Actions and published with cryptograph
 
 ### What Gets Published
 
-Each [GitHub Release](https://github.com/prabhakk-mw/matlab-terminal/releases) includes:
+Each [GitHub Release](https://github.com/matlab/terminal-in-matlab/releases) includes:
 
 | Artifact | Description |
 |----------|-------------|
@@ -58,7 +58,7 @@ Each [GitHub Release](https://github.com/prabhakk-mw/matlab-terminal/releases) i
 The simplest way to verify your installation:
 
 ```matlab
-Terminal.verify()
+terminal.verify()
 ```
 
 This automatically:
@@ -73,7 +73,7 @@ Download `checksums.txt` from the release and verify locally:
 
 ```bash
 # Download the release assets
-gh release download v0.10.1 -R prabhakk-mw/matlab-terminal
+gh release download v0.10.1 -R matlab/terminal-in-matlab
 
 # Verify checksums
 sha256sum -c checksums.txt
@@ -92,21 +92,21 @@ go install github.com/slsa-framework/slsa-verifier/v2/cli/slsa-verifier@latest
 # Verify the .mltbx
 slsa-verifier verify-artifact \
   --provenance-path multiple.intoto.jsonl \
-  --source-uri github.com/prabhakk-mw/matlab-terminal \
+  --source-uri github.com/matlab/terminal-in-matlab \
   --source-tag v0.10.1 \
   Terminal.mltbx
 
 # Verify a specific platform binary
 slsa-verifier verify-artifact \
   --provenance-path multiple.intoto.jsonl \
-  --source-uri github.com/prabhakk-mw/matlab-terminal \
+  --source-uri github.com/matlab/terminal-in-matlab \
   --source-tag v0.10.1 \
   matlab-terminal-server-glnxa64
 ```
 
 A successful verification proves:
 
-- The artifact was built by the `release.yml` workflow in `prabhakk-mw/matlab-terminal`
+- The artifact was built by the `release.yml` workflow in `matlab/terminal-in-matlab`
 - It was built from the exact tagged commit (not a modified source)
 - The build ran on a GitHub-hosted runner in an isolated environment that the repository owner cannot tamper with
 - The attestation is signed via [Sigstore](https://www.sigstore.dev/) and logged in a public [Rekor](https://docs.sigstore.dev/logging/overview/) transparency log
@@ -129,7 +129,7 @@ SLSA provenance does not replace traditional code signing for OS-level trust:
 - **Windows SmartScreen/WDAC** may flag unsigned `.exe` files on managed endpoints
 - **Enterprise EDR tools** (CrowdStrike, Carbon Black) check Authenticode/codesign signatures, not SLSA provenance
 
-If your organization requires OS-level code signing, please [open an issue](https://github.com/prabhakk-mw/matlab-terminal/issues) to help us prioritize this.
+If your organization requires OS-level code signing, please [open an issue](https://github.com/matlab/terminal-in-matlab/issues) to help us prioritize this.
 
 ---
 
