@@ -14,59 +14,38 @@
 %[text] ## Check for an existing installation
 addons = matlab.addons.installedAddons;
 terminalAddon = addons(addons.Name == "Terminal", :);
-if ~isempty(terminalAddon) %[output:group:6433bcaf]
-    disp("Terminal " + terminalAddon.Version + " is already installed."); %[output:8d2d015c]
+if ~isempty(terminalAddon)
+    disp("Terminal " + terminalAddon.Version + " is already installed.");
     reply = input("Re-install with the latest version? [Y/n]: ", "s");
     if strtrim(lower(reply)) == "n"
         disp("Installation cancelled.");
         return
     end
-    disp("Uninstalling Terminal " + terminalAddon.Version + "..."); %[output:2a07cfc2]
+    disp("Uninstalling Terminal " + terminalAddon.Version + "...");
     matlab.addons.uninstall("Terminal");
-end %[output:group:6433bcaf]
+end
 %%
 %[text] ## Download the latest release
 url = "https://github.com/prabhakk-mw/matlab-terminal/releases/latest/download/Terminal.mltbx";
 mltbxFile = fullfile(tempdir, "Terminal.mltbx");
 
-disp("Downloading Terminal.mltbx from GitHub..."); %[output:8b32af35]
+disp("Downloading Terminal.mltbx from GitHub...");
 websave(mltbxFile, url);
 
-disp("Download complete."); %[output:6dc9bd10]
+disp("Download complete.");
 
-disp("Installing terminal..."); %[output:60ebb475]
+disp("Installing terminal...");
 matlab.addons.install(mltbxFile);
 delete(mltbxFile);
-disp("Terminal " + terminal.version() + " installed successfully."); %[output:94338645]
+disp("Terminal " + terminal.version() + " installed successfully.");
 %%
 %[text] ## Open a Terminal
 edit(fullfile(fileparts(which("terminal.m")), "doc","GettingStarted.mlx"))
 cd(userpath)
-terminal(); %[output:2d5a62c8]
+terminal();
 
 %[appendix]{"version":"1.0"}
 %---
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":42.5}
-%---
-%[output:8d2d015c]
-%   data: {"dataType":"text","outputData":{"text":"Terminal 0.13.2 is already installed.\n","truncated":false}}
-%---
-%[output:2a07cfc2]
-%   data: {"dataType":"text","outputData":{"text":"Uninstalling Terminal 0.13.2...\n","truncated":false}}
-%---
-%[output:8b32af35]
-%   data: {"dataType":"text","outputData":{"text":"Downloading Terminal.mltbx from GitHub...\n","truncated":false}}
-%---
-%[output:6dc9bd10]
-%   data: {"dataType":"text","outputData":{"text":"Download complete.\n","truncated":false}}
-%---
-%[output:60ebb475]
-%   data: {"dataType":"text","outputData":{"text":"Installing terminal...\n","truncated":false}}
-%---
-%[output:94338645]
-%   data: {"dataType":"text","outputData":{"text":"Terminal 0.13.2 installed successfully.\n","truncated":false}}
-%---
-%[output:2d5a62c8]
-%   data: {"dataType":"text","outputData":{"text":"Extracting Terminal assets to:\n  \/tmp\/MATLAB Add-Ons\/Toolboxes\/Terminal\n","truncated":false}}
 %---
