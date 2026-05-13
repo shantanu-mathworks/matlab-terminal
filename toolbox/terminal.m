@@ -752,6 +752,11 @@ classdef terminal < handle
                     obj.serverPost('/api/resize', struct('id', msg.id, 'cols', msg.cols, 'rows', msg.rows));
                 case 'close'
                     obj.serverPost('/api/close', struct('id', msg.id));
+                case 'paste'
+                    text = clipboard('paste');
+                    if ~isempty(text)
+                        obj.serverPost('/api/input', struct('id', msg.id, 'data', text));
+                    end
             end
         end
 

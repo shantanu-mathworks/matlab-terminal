@@ -796,19 +796,15 @@
                 });
             }
 
-            var hasClipboard = !!(navigator.clipboard && navigator.clipboard.readText);
             var pasteItem = document.createElement('div');
-            pasteItem.className = 'context-menu-item' + (hasClipboard ? '' : ' disabled');
+            pasteItem.className = 'context-menu-item';
             pasteItem.innerHTML = '<span>Paste</span><span class="context-menu-shortcut">Ctrl+Shift+V</span>';
-            if (hasClipboard) {
-                pasteItem.addEventListener('click', function () {
-                    navigator.clipboard.readText().then(function (text) {
-                        if (text && !entry.exited) bufferInput(id, text);
-                    });
-                    dismissContextMenu();
-                    entry.terminal.focus();
-                });
-            }
+            pasteItem.addEventListener('click', function () {
+                dismissContextMenu();
+                // Route through MATLAB — CEF blocks clipboard.readText() from click events.
+                sendToMATLAB({ type: 'paste', id: id });
+                entry.terminal.focus();
+            });
 
             menu.appendChild(copyItem);
             menu.appendChild(pasteItem);
