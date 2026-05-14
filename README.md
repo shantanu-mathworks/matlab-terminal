@@ -66,7 +66,7 @@ You can use these additional commands with your terminal.
 | Open with a custom title | `t = terminal(Name="Build");` |
 | Open in a floating window | `t = terminal(WindowStyle="normal");` |
 | Open with a specific shell | Linux/macOS: `t = terminal(Shell="zsh");`<br><br>Windows: `t = terminal(Shell="powershell.exe");` |
-| Customize terminal color theme | For instructions, see [Customize Terminal Theme](/guides/customize-terminal-theme) |
+| Customize terminal color theme | For instructions, see [Customize Terminal Theme (GitHub)](/guides/customize-terminal-theme.md) |
 | List all running terminals | `terminal.list()` |
 | Close all running terminals | `terminal.closeAll()` |
 | Close a single terminal | `delete(t);` or `exit` |
