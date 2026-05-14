@@ -1,17 +1,13 @@
-- **Theme integration** — Follows the MATLAB theme by default, or choose from built-in presets like Dracula, Monokai, Nord, and more. Change themes on the fly with `t.Theme = "dracula"`. See [Themes](#themes) for the full list and customization options.
+# Customize Terminal Theme
+
+By default, Terminal uses the MATLAB® desktop theme, light or dark, and updates automatically when the MATLAB theme changes. You can also use preset themes or specify your own theme. 
 
   | Light                                  | Dark                                 |
   | -------------------------------------- | ------------------------------------ |
-  | ![Light theme](images/theme-light.png) | ![Dark theme](images/theme-dark.png) |
+  | ![Light theme](../images/theme-light.png) | ![Dark theme](../images/theme-dark.png) |
 
-| Open with a different color theme | `t = terminal(Theme="solarized-light");` |
-| Change theme on the fly | `t.Theme = "monokai";` |
-  
-## Themes
 
-By default, Terminal follows the MATLAB Desktop theme — light or dark — and updates automatically when the MATLAB theme changes. Override this with a named preset, or define a fully custom color scheme.
-
-### Using a Preset Theme
+## Use a Preset Theme
 
 ```matlab
 t = terminal(Theme="dracula");
@@ -23,7 +19,7 @@ Change the theme on an existing terminal:
 t.Theme = "nord";
 ```
 
-### Available Presets
+## Available Themes
 
 | Preset               | Description                                |
 | -------------------- | ------------------------------------------ |
@@ -46,9 +42,9 @@ List all available presets programmatically:
 terminal.themes()
 ```
 
-### Custom Themes
+## Use Custom Themes
 
-Pass a struct with color fields to define a custom theme. Only include the fields you want to customize — any field you omit inherits its value from the built-in `"dark"` preset.
+Pass a struct with color fields to define a custom theme. Only include the fields you want to customize. Any field you omit inherits its value from the built-in `"dark"` preset.
 
 ```matlab
 % Only override background and foreground; all other colors come from "dark"
@@ -96,7 +92,7 @@ myTheme = struct( ...
 t = terminal(Theme=myTheme);
 ```
 
-#### Supported Fields
+### Supported Fields
 
 All fields are optional. Values must be `'#rrggbb'` hex color strings.
 
@@ -124,24 +120,8 @@ All fields are optional. Values must be `'#rrggbb'` hex color strings.
 | `brightCyan`          | ANSI bright cyan (color 14)                | xterm.js default               |
 | `brightWhite`         | ANSI bright white (color 15)               | xterm.js default               |
 
-#### Validation
 
-Custom theme structs are validated when set. Terminal raises an error for:
-
-- **Unknown field names** — catches typos like `'backgroud'` instead of `'background'`
-- **Invalid color format** — values must be `'#rrggbb'` hex strings (e.g., `'#ff0000'`, not `'red'` or `'#f00'`)
-
-```matlab
-% Typo in field name → error
-terminal(Theme=struct('backgroud', '#1e1e1e'))
-% Error: Unknown theme field "backgroud". Valid fields: background, foreground, ...
-
-% Invalid color format → error
-terminal(Theme=struct('background', 'red'))
-% Error: Theme field "background" has invalid value "red". Use '#rrggbb' hex format.
-```
-
-### Default Theme
+## Set Default Theme
 
 Set a default theme that applies to all new terminals and persists across MATLAB sessions:
 
@@ -149,7 +129,7 @@ Set a default theme that applies to all new terminals and persists across MATLAB
 terminal.setDefaultTheme("dracula")
 ```
 
-New terminals use this theme unless overridden with the `Theme` argument:
+New terminals use this theme unless your override them with the `Theme` argument:
 
 ```matlab
 t1 = terminal();                  % uses "dracula"
@@ -162,3 +142,10 @@ Query and reset the default:
 terminal.getDefaultTheme()        % returns "dracula"
 terminal.setDefaultTheme("auto")  % reset to follow MATLAB theme
 ```
+
+---
+
+Copyright 2026 The MathWorks, Inc.
+
+---
+
