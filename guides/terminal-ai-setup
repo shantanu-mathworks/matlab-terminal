@@ -1,7 +1,7 @@
 
 # Using the Terminal AI Setup
 
-This guide shows details of the AI setup process for the MATLAB terminal, which installs:
+This guide shows details of the AI setup process for the MATLAB® terminal, which installs:
 - an AI agent of your choice such as Claude, Copilot, or Gemini.
 - the [MATLAB MCP Core Server](https://github.com/matlab/matlab-mcp-core-server)
 - skills from [MATLAB Agentic Toolkit (GitHub)](https://github.com/matlab/matlab-agentic-toolkit) and [Simulink Agentic Toolkit (GitHub)](https://github.com/matlab/simulink-agentic-toolkit).
