@@ -1,4 +1,4 @@
-# Terminal in MATLAB®
+# Terminal in MATLAB
 
 
 [![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=prabhakk-mw/matlab-terminal&file=toolbox/doc/Install.m) &nbsp; [![Download Latest](https://img.shields.io/github/v/release/prabhakk-mw/matlab-terminal?label=Download%20Latest&logo=github)](../../releases/latest/download/Terminal.mltbx)
