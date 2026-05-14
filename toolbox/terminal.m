@@ -33,7 +33,7 @@ classdef terminal < handle
     %                   Simulink Agentic Toolkits, and registers with your AI
     %                   agent. First run prompts a setup wizard; preferences are
     %                   saved for subsequent runs. Default: false.
-    %     Agent       - "claude"|"codex"|"copilot"|"gemini"|"cursor"|"amp"
+    %     Agent       - "claude"|"amp"|"gemini"
     %                   Skips the wizard. Implies Agentic=true.
     %     Toolkits    - ["matlab"] (default), ["simulink"], or ["matlab","simulink"]
     %                   Which agentic toolkits to enable.
@@ -121,11 +121,11 @@ classdef terminal < handle
         GITHUB_REPO = 'prabhakk-mw/matlab-terminal'
         MCP_SERVER_BINARY = 'matlab-mcp-core-server'
         MCP_SERVER_REPO = 'matlab/matlab-mcp-core-server'
-        MCP_MIN_SERVER_VERSION = '0.8.0'
+        MCP_MIN_SERVER_VERSION = '0.9.1'
         % Agentic Toolkit constants
         AGENTIC_MATLAB_REPO = 'matlab/matlab-agentic-toolkit'
         AGENTIC_SIMULINK_REPO = 'matlab/simulink-agentic-toolkit'
-        AGENTIC_SUPPORTED_AGENTS = ["claude","amp","gemini","cursor","codex","copilot"]
+        AGENTIC_SUPPORTED_AGENTS = ["claude","amp","gemini"]
     end
 
     methods
@@ -162,6 +162,10 @@ classdef terminal < handle
             % --- Agentic: full agent integration with toolkits ---
             if options.Agent ~= ""
                 options.Agentic = true;
+            end
+            if options.AgentCLI ~= "" && options.Agent ~= "claude"
+                warning('Terminal:AgentCLIIgnored', ...
+                    'AgentCLI is only supported for Agent="claude". It will be ignored.');
             end
             if options.Agentic
                 % Phase 1: Ensure install root and detect existing state
@@ -1783,10 +1787,8 @@ classdef terminal < handle
             fprintf('======================\n\n');
 
             % --- Agent selection ---
-            agents = terminal.AGENTIC_SUPPORTED_AGENTS;
-            labels = ["Claude Code", "Sourcegraph Amp", "Gemini CLI", ...
-                      "Cursor (untested)", "OpenAI Codex (untested)", ...
-                      "GitHub Copilot (untested)"];
+            agents = ["claude", "amp", "gemini"];
+            labels = ["Claude Code", "Sourcegraph Amp", "Gemini CLI"];
             fprintf('Which AI agent are you using?\n');
             for i = 1:numel(agents)
                 fprintf('  [%d] %s\n', i, labels(i));

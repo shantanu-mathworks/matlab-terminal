@@ -94,10 +94,7 @@ On first run, a setup wizard prompts you to select an agent and toolkits. Prefer
 | Agent   | Registration                                  |
 | ------- | --------------------------------------------- |
 | Claude  | CLI command pre-populated in terminal         |
-| Codex   | CLI command pre-populated in terminal         |
-| Copilot | Config written to `.vscode/settings.json`     |
 | Gemini  | Config written to `.gemini/settings.json`     |
-| Cursor  | Config written to `.cursor/mcp.json`          |
 | Amp     | Config written to `.config/amp/settings.json` |
 
 ### Custom Agent CLI
@@ -145,7 +142,7 @@ terminal.resetAgentOptions()               % clear preferences and config, re-ru
 
 ### How It Works
 
-`terminal(Agentic=true)` shares the MATLAB Embedded Connector so the MCP Core Server can connect to the running MATLAB session. It downloads the selected agentic toolkits, merges their tool definitions with the bundled editor tools, and registers the MCP server with your chosen AI agent. For CLI agents (Claude, Codex), the registration command is pre-populated in the terminal. For config-file agents (Copilot, Gemini, Cursor, Amp), the config is written directly.
+`terminal(Agentic=true)` shares the MATLAB Embedded Connector so the MCP Core Server can connect to the running MATLAB session. It downloads the selected agentic toolkits, merges their tool definitions with the bundled editor tools, and registers the MCP server with your chosen AI agent. For CLI agents (Claude), the registration command is pre-populated in the terminal. For config-file agents (Gemini, Amp), the config is written directly.
 
 On subsequent calls, setup is skipped — only the MATLAB session is re-shared and Simulink toolkit re-initialized (if enabled).
 
@@ -186,7 +183,7 @@ matlab.addons.uninstall('Terminal')
 - **Self-updating** — `terminal.update()` checks GitHub for new releases and walks through the upgrade interactively.
 - **Auto-cleanup** — Closing the last tab closes the window. The server process is terminated when the terminal is deleted or MATLAB exits. An idle timeout acts as a safety net.
 - **Environment variables** — Terminal sessions have `MATLAB_PID` and `MATLAB_ROOT` set, allowing CLI tools to discover the running MATLAB instance.
-- **AI agent integration** — `terminal(Agent="claude")` or `terminal(Agentic=true)` sets up AI coding agents (Claude, Codex, Copilot, Gemini, Cursor, Amp) to work with MATLAB and Simulink via MCP. See [AI Agent Integration](#ai-agent-integration) for details.
+- **AI agent integration** — `terminal(Agent="claude")` or `terminal(Agentic=true)` sets up AI coding agents (Claude, Gemini, Amp) to work with MATLAB and Simulink via MCP. See [AI Agent Integration](#ai-agent-integration) for details.
 - **Event API (R2023a+)** — On R2023a and later, uses `sendEventToHTMLSource`/`HTMLEventReceivedFcn` for reliable keystroke delivery with no data loss. Older releases fall back to the Data channel with buffering.
 - **matlab-proxy compatible** — Works in browser-based MATLAB via [matlab-proxy](https://github.com/mathworks/matlab-proxy).
 - **Zero runtime dependencies** — No Node.js®, Python®, or Java® required. A single Go binary handles all PTY management.
