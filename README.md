@@ -79,10 +79,15 @@ terminal.test()
 Terminal can set up AI coding agents to work with MATLAB and Simulink via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). This allows agents like Claude, Codex, Copilot, Gemini, Cursor, and Amp to evaluate MATLAB code, run files, interact with the editor, and build Simulink models.
 
 ```matlab
+% Interactive wizard (first run)
 t = terminal(Agentic=true);
+
+% Skip the wizard — specify your agent directly
+t = terminal(Agent="claude");
+t = terminal(Agent="gemini", Toolkits=["matlab","simulink"]);
 ```
 
-On first run, a setup wizard prompts you to select an agent and toolkits. Preferences are saved for subsequent runs.
+On first run, a setup wizard prompts you to select an agent and toolkits. Preferences are saved — subsequent calls only re-share the MATLAB session without repeating setup.
 
 ### Supported Agents
 
@@ -95,12 +100,23 @@ On first run, a setup wizard prompts you to select an agent and toolkits. Prefer
 | Cursor  | Config written to `.cursor/mcp.json`          |
 | Amp     | Config written to `.config/amp/settings.json` |
 
+### Custom Agent CLI
+
+If your agent binary has a non-standard name or path, use `AgentCLI`:
+
+```matlab
+t = terminal(Agent="claude", AgentCLI="devai launch claude");
+t = terminal(Agent="claude", AgentCLI="/usr/local/bin/my-claude-wrapper");
+```
+
+The custom CLI command is saved in `config.json` for subsequent runs.
+
 ### Toolkits
 
 - **[MATLAB Agentic Toolkit](https://github.com/matlab/matlab-agentic-toolkit)** — MCP tools + skills for MATLAB (evaluate code, run files, run tests, check code, detect errors, and more)
 - **[Simulink Agentic Toolkit](https://github.com/matlab/simulink-agentic-toolkit)** — MCP tools + skills for Simulink model building
 
-Toolkits are downloaded automatically from GitHub on first use.
+Toolkits are downloaded automatically from GitHub on first use (with confirmation).
 
 ### Editor Tools
 
@@ -113,29 +129,13 @@ Terminal bundles additional MCP tools that give AI agents read-only access to th
 | `matlab_editor_selection` | Get the currently highlighted text                         |
 | `matlab_editor_read`      | Read contents of an open file (reflects unsaved edits)     |
 
-### Skipping the Wizard
-
-Pass `AgentOptions` to skip the interactive wizard:
-
-```matlab
-t = terminal(Agentic=true, AgentOptions=struct('Agent',"claude",'Toolkits',["matlab"]));
-t = terminal(Agentic=true, AgentOptions=struct('Agent',"gemini",'Toolkits',["matlab","simulink"]));
-```
-
-Save preferences so future calls use the same options:
-
-```matlab
-terminal.setAgentOptions(struct('Agent',"claude",'Toolkits',["matlab"]));
-t = terminal(Agentic=true);  % uses saved options
-```
-
 ### Managing Toolkits
 
 ```matlab
 terminal.updateAgenticToolkit()            % update all installed toolkits
 terminal.updateAgenticToolkit("matlab")    % update MATLAB toolkit only
 terminal.updateAgenticToolkit("simulink")  % update Simulink toolkit only
-terminal.resetAgentOptions()               % clear preferences, re-run wizard
+terminal.resetAgentOptions()               % clear preferences and config, re-run wizard
 ```
 
 ### Requirements
@@ -146,6 +146,8 @@ terminal.resetAgentOptions()               % clear preferences, re-run wizard
 ### How It Works
 
 `terminal(Agentic=true)` shares the MATLAB Embedded Connector so the MCP Core Server can connect to the running MATLAB session. It downloads the selected agentic toolkits, merges their tool definitions with the bundled editor tools, and registers the MCP server with your chosen AI agent. For CLI agents (Claude, Codex), the registration command is pre-populated in the terminal. For config-file agents (Copilot, Gemini, Cursor, Amp), the config is written directly.
+
+On subsequent calls, setup is skipped — only the MATLAB session is re-shared and Simulink toolkit re-initialized (if enabled).
 
 ## Updating
 
@@ -184,7 +186,7 @@ matlab.addons.uninstall('Terminal')
 - **Self-updating** — `terminal.update()` checks GitHub for new releases and walks through the upgrade interactively.
 - **Auto-cleanup** — Closing the last tab closes the window. The server process is terminated when the terminal is deleted or MATLAB exits. An idle timeout acts as a safety net.
 - **Environment variables** — Terminal sessions have `MATLAB_PID` and `MATLAB_ROOT` set, allowing CLI tools to discover the running MATLAB instance.
-- **AI agent integration** — `terminal(Agentic=true)` sets up AI coding agents (Claude, Codex, Copilot, Gemini, Cursor, Amp) to work with MATLAB and Simulink via MCP. See [AI Agent Integration](#ai-agent-integration) for details.
+- **AI agent integration** — `terminal(Agent="claude")` or `terminal(Agentic=true)` sets up AI coding agents (Claude, Codex, Copilot, Gemini, Cursor, Amp) to work with MATLAB and Simulink via MCP. See [AI Agent Integration](#ai-agent-integration) for details.
 - **Event API (R2023a+)** — On R2023a and later, uses `sendEventToHTMLSource`/`HTMLEventReceivedFcn` for reliable keystroke delivery with no data loss. Older releases fall back to the Data channel with buffering.
 - **matlab-proxy compatible** — Works in browser-based MATLAB via [matlab-proxy](https://github.com/mathworks/matlab-proxy).
 - **Zero runtime dependencies** — No Node.js®, Python®, or Java® required. A single Go binary handles all PTY management.
