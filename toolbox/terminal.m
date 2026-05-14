@@ -259,6 +259,12 @@ classdef terminal < handle
             args = sprintf('--env "MATLAB_PID=%s" --env "MATLAB_ROOT=%s" --ready-file "%s"', ...
                 matlabPid, matlabRoot, readyFile);
 
+            % Forward LANG so the PTY inherits the user's locale.
+            lang = getenv('LANG');
+            if ~isempty(lang)
+                args = sprintf('%s --env "LANG=%s"', args, lang);
+            end
+
             % Pass the token via environment variable so it is not visible
             % in the process list (ps, tasklist, /proc/*/cmdline).
             setenv('MATLAB_TERMINAL_TOKEN', obj.AuthToken);
@@ -608,6 +614,11 @@ classdef terminal < handle
                 readyFile = [tempname, '.txt'];
                 args = sprintf('--env "MATLAB_PID=%s" --env "MATLAB_ROOT=%s" --ready-file "%s"', ...
                     matlabPid, matlabRoot, readyFile);
+
+                lang = getenv('LANG');
+                if ~isempty(lang)
+                    args = sprintf('%s --env "LANG=%s"', args, lang);
+                end
 
                 setenv('MATLAB_TERMINAL_TOKEN', obj.AuthToken);
 

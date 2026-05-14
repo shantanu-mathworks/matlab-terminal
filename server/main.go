@@ -56,6 +56,15 @@ func main() {
 	// Override TERM so PTY sessions get color support (harmless on Windows).
 	os.Setenv("TERM", "xterm-256color")
 
+	// Ensure UTF-8 locale for multi-byte character support (CJK, etc.).
+	// Without this, shells may not process non-ASCII input correctly.
+	if lang := os.Getenv("LANG"); lang == "" || lang == "C" || lang == "POSIX" {
+		os.Setenv("LANG", "en_US.UTF-8")
+	}
+	if os.Getenv("LC_ALL") == "C" || os.Getenv("LC_ALL") == "POSIX" {
+		os.Setenv("LC_ALL", "en_US.UTF-8")
+	}
+
 	// Detect default shell (platform-specific).
 	shell := defaultShell()
 
