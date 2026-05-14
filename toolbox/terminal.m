@@ -1487,7 +1487,18 @@ classdef terminal < handle
                     '--setup-matlab failed:\n  %s', strtrim(output));
             else
                 fprintf('MATLAB MCP components installed.\n');
-                fprintf('** Restart MATLAB for the new components to take effect. **\n\n');
+                % Add the newly installed toolbox to the path so we don't
+                % need a MATLAB restart. Both toolboxes live under the same
+                % Add-Ons/Toolboxes/ parent directory.
+                toolboxesDir = fileparts(fileparts(which('terminal')));
+                mcpToolboxDir = fullfile(toolboxesDir, 'MATLAB MCP Core Server Toolbox');
+                if isfolder(mcpToolboxDir)
+                    addpath(mcpToolboxDir);
+                else
+                    error('Terminal:MCPToolboxNotFound', ...
+                        'MATLAB MCP Core Server Toolbox was not found at:\n  %s\n--setup-matlab may have failed to install correctly.', ...
+                        mcpToolboxDir);
+                end
             end
         end
 
