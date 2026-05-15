@@ -163,10 +163,6 @@ classdef (Sealed) terminal < handle
             if options.Agent ~= ""
                 options.Agentic = true;
             end
-            if options.AgentCLI ~= "" && options.Agent ~= "claude"
-                warning('Terminal:AgentCLIIgnored', ...
-                    'AgentCLI is only supported for Agent="claude". It will be ignored.');
-            end
             if options.Agentic
                 % Phase 1: Ensure install root and detect existing state
                 terminal.migrateOldLayout();
@@ -242,6 +238,11 @@ classdef (Sealed) terminal < handle
                     terminal.mergeMarketplace(toolkitPaths);
 
                     % Phase 8: Register with agent
+                    if options.AgentCLI ~= "" && agentOpts.Agent ~= "claude"
+                        warning('Terminal:AgentCLIIgnored', ...
+                            'AgentCLI is only supported for Agent="claude". It will be ignored.');
+                        options.AgentCLI = "";
+                    end
                     agentCLI = terminal.resolveAgentCLI( ...
                         agentOpts.Agent, options.AgentCLI, config);
                     obj.MCPCommand = terminal.buildAgentRegistration( ...
@@ -1500,24 +1501,31 @@ classdef (Sealed) terminal < handle
             stdinNull = terminal.stdinRedirect();
             cmd = sprintf('"%s" --setup-matlab --matlab-root="%s" %s', ...
                 serverBin, matlabroot, stdinNull);
-            fprintf('Installing MATLAB MCP components...\n');
+            fprintf('Installing MATLAB MCP Core Server Toolbox...\n This may take a minute — please wait.\n');
             [status, output] = system(cmd);
             if status ~= 0
                 warning('Terminal:SetupMatlabFailed', ...
                     '--setup-matlab failed:\n  %s', strtrim(output));
             else
-                fprintf('MATLAB MCP components installed.\n');
                 % Add the newly installed toolbox to the path so we don't
                 % need a MATLAB restart. Both toolboxes live under the same
                 % Add-Ons/Toolboxes/ parent directory.
+                % Find the MCP toolbox folder. Name may include a version
+                % suffix (e.g., "MATLAB MCP Core Server Toolbox@1.0.0")
+                % depending on the MATLAB release.
                 toolboxesDir = fileparts(fileparts(which('terminal')));
-                mcpToolboxDir = fullfile(toolboxesDir, 'MATLAB MCP Core Server Toolbox');
-                if isfolder(mcpToolboxDir)
+                listing = dir(toolboxesDir);
+                names = {listing.name};
+                matches = ~cellfun(@isempty, regexp(names, '^MATLAB[_ ]MCP[_ ]Core[_ ]Server[_ ]Toolbox'));
+                if any(matches)
+                    matched = names(matches);
+                    mcpToolboxDir = fullfile(toolboxesDir, matched{1});
                     addpath(mcpToolboxDir);
+                    fprintf('MATLAB MCP Core Server Toolbox installed.\n');
                 else
                     error('Terminal:MCPToolboxNotFound', ...
-                        'MATLAB MCP Core Server Toolbox was not found at:\n  %s\n--setup-matlab may have failed to install correctly.', ...
-                        mcpToolboxDir);
+                        'MATLAB MCP Core Server Toolbox was not found in:\n  %s\n--setup-matlab may have failed to install correctly.', ...
+                        toolboxesDir);
                 end
             end
         end
@@ -2113,9 +2121,8 @@ classdef (Sealed) terminal < handle
 
             switch agent
                 case "claude"
-                    terminal.registerClaude(serverBin, serverArgs, toolkitPaths, agentCLI);
+                    terminal.registerClaude(serverBin, serverArgs, agentCLI);
                     terminal.installGlobalSkills(toolkitPaths);
-                    cmd = '';
 
                 case "codex"
                     codexCmd = 'codex';
@@ -2125,33 +2132,26 @@ classdef (Sealed) terminal < handle
                     argsStr = strjoin(quotedArgs, ' ');
                     cmd = sprintf('%s mcp add matlab -- "%s" %s', codexCmd, serverBin, argsStr);
                     terminal.installGlobalSkills(toolkitPaths);
+                    fprintf('Run the command above in the terminal to register.\n\n');
+
 
                 case "copilot"
                     terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
                     terminal.installGlobalSkills(toolkitPaths);
-                    cmd = '';
 
                 case "gemini"
                     terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
                     terminal.installGlobalSkills(toolkitPaths);
-                    cmd = '';
 
                 case "cursor"
                     terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
-                    cmd = '';
 
                 case "amp"
                     terminal.writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths);
-                    cmd = '';
             end
 
             terminal.printSetupSummary(agent, toolkitPaths);
 
-            if isempty(cmd)
-                fprintf('Restart %s to activate.\n\n', agent);
-            else
-                fprintf('Run the command above in the terminal to register.\n\n');
-            end
         end
 
         function writeAgentConfig(agent, serverBin, serverArgs, toolkitPaths)
@@ -2356,7 +2356,7 @@ classdef (Sealed) terminal < handle
             end
         end
 
-        function registerClaude(serverBin, serverArgs, toolkitPaths, agentCLI)
+        function registerClaude(serverBin, serverArgs, agentCLI)
             %REGISTERCLAUDE Register MCP server and plugins with Claude Code.
             %   Uses `claude mcp add-json` if CLI is on PATH, otherwise
             %   writes ~/.claude.json directly.
@@ -2365,7 +2365,7 @@ classdef (Sealed) terminal < handle
             nullDev = terminal.nullRedirect();
             stdinNull = terminal.stdinRedirect();
 
-            if nargin < 4, agentCLI = ""; end
+            if nargin < 3, agentCLI = ""; end
 
             % Resolve the claude CLI command.
             if agentCLI ~= ""
@@ -2734,9 +2734,41 @@ classdef (Sealed) terminal < handle
 
             fprintf('Extracting Terminal assets to:\n  %s\n', cacheRoot);
 
+            try
+                terminal.extractToDir(cacheRoot, matFile);
+            catch ME
+                if contains(ME.message, 'permission', 'IgnoreCase', true)
+                    % Newer MATLAB versions may install toolboxes read-only.
+                    % Use setPermissions (R2025a+) to make the directory writable.
+                    perms = filePermissions(cacheRoot);
+                    setPermissions(perms, "Writable", true, PermissionsTarget="folders");
+                    terminal.extractToDir(cacheRoot, matFile);
+                else
+                    rethrow(ME);
+                end
+            end
+
+            % Strip macOS quarantine from the extracted server binary.
+            % Downloaded .mltbx files inherit com.apple.quarantine, which
+            % causes Gatekeeper to block the unsigned binary.
+            if ismac
+                [~, ~] = system(sprintf('xattr -cr "%s"', serverBinDir));
+            end
+
+            % Touch stamp file so we know this extraction is current.
+            fid = fopen(stampFile, 'w');
+            fclose(fid);
+
+            htmlDir = cacheDir;
+        end
+
+        function extractToDir(cacheRoot, matFile)
+            %EXTRACTTODIR Write web_assets.mat contents to disk.
             S = load(matFile, 'assets');
             arch = computer('arch');
             fields = fieldnames(S.assets);
+            warnState = warning('off', 'MATLAB:MKDIR:CreatedFolderInPackage');
+            cleanupObj = onCleanup(@() warning(warnState)); %#ok<NASGU>
             for i = 1:numel(fields)
                 entry = S.assets.(fields{i});
                 % Skip binaries for other platforms.
@@ -2755,19 +2787,6 @@ classdef (Sealed) terminal < handle
                     system(sprintf('chmod +x "%s"', dst));
                 end
             end
-
-            % Strip macOS quarantine from the extracted server binary.
-            % Downloaded .mltbx files inherit com.apple.quarantine, which
-            % causes Gatekeeper to block the unsigned binary.
-            if ismac
-                [~, ~] = system(sprintf('xattr -cr "%s"', serverBinDir));
-            end
-
-            % Touch stamp file so we know this extraction is current.
-            fid = fopen(stampFile, 'w');
-            fclose(fid);
-
-            htmlDir = cacheDir;
         end
 
         function deferredClose(tmr, obj, fig)
