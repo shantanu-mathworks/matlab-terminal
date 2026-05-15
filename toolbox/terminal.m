@@ -1,4 +1,4 @@
-classdef terminal < handle
+classdef (Sealed) terminal < handle
     %TERMINAL Embeds a system terminal inside a MATLAB figure using uihtml.
     %
     %   t = terminal()                    — docked terminal with default name
