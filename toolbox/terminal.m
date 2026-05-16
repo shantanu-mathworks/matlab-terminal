@@ -2119,6 +2119,7 @@ classdef (Sealed) terminal < handle
                 sprintf('--extension-file=%s', extensionFile) ...
             };
 
+            cmd = "";
             switch agent
                 case "claude"
                     terminal.registerClaude(serverBin, serverArgs, agentCLI);
