@@ -1,0 +1,69 @@
+
+# Using the Terminal AI Setup
+
+This guide shows details of the AI setup process for the MATLAB® terminal, which installs:
+- an AI agent of your choice such as Claude, Copilot, or Gemini.
+- the [MATLAB MCP Core Server](https://github.com/matlab/matlab-mcp-core-server)
+- skills from [MATLAB Agentic Toolkit (GitHub)](https://github.com/matlab/matlab-agentic-toolkit) and [Simulink Agentic Toolkit (GitHub)](https://github.com/matlab/simulink-agentic-toolkit).
+
+To use the wizard, run:
+
+```matlab
+% Interactive wizard (first run)
+t = terminal(Agentic=true);
+```
+The terminal saves your entered options and calling the wizard again does not repeat the set up.
+
+You can also manually set up your prefered agent and toolkit.
+
+```
+t = terminal(Agent="claude");
+t = terminal(Agent="gemini", Toolkits=["matlab","simulink"]);
+```
+
+## Agent Settings
+
+The terminal automatically writes the configuration settings for the following agents to these locations:
+
+| Agent   | Configuration                                  |
+| ------- | --------------------------------------------- |
+| Claude  | CLI command pre-populated in terminal         |
+| Gemini  | Configuration written to `.gemini/settings.json`     |
+| Amp     | Configuration written to `.config/amp/settings.json` |
+
+### Use a Custom Agent CLI
+
+If your agent binary has a non-standard name or path, use the `AgentCLI` argument:
+
+```matlab
+t = terminal(Agent="claude", AgentCLI="devai launch claude");
+t = terminal(Agent="claude", AgentCLI="/usr/local/bin/my-claude-wrapper");
+```
+
+The custom CLI command is saved in `config.json`.
+
+## Additional Tools for MCP Server
+
+Terminal adds these tools to the MATLAB MCP Core Server, which give agents read-only access to the MATLAB editor.
+
+| Tool                      | Description                                                |
+| ------------------------- | ---------------------------------------------------------- |
+| `matlab_editor_list`      | List all files open in the editor with modification status |
+| `matlab_editor_active`    | Get the active file, cursor position, and selected text    |
+| `matlab_editor_selection` | Get the currently highlighted text                         |
+| `matlab_editor_read`      | Read contents of an open file (reflects unsaved edits)     |
+
+## Manage Toolkits
+
+```matlab
+terminal.updateAgenticToolkit()            % update all installed toolkits
+terminal.updateAgenticToolkit("matlab")    % update MATLAB toolkit only
+terminal.updateAgenticToolkit("simulink")  % update Simulink toolkit only
+terminal.resetAgentOptions()               % clear preferences and configuration, re-run wizard
+```
+
+---
+
+Copyright 2026 The MathWorks, Inc.
+
+---
