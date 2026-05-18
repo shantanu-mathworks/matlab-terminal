@@ -35,7 +35,8 @@ classdef (Sealed) terminal < handle
     %                   saved for subsequent runs. Default: false.
     %     Agent       - "claude"|"amp"|"gemini"
     %                   Skips the wizard. Implies Agentic=true.
-    %     Toolkits    - ["matlab"] (default), ["simulink"], or ["matlab","simulink"]
+    %     Toolkits    - ["matlab"] or ["matlab","simulink"] (default includes
+    %                   Simulink when installed), or ["simulink"] alone
     %                   Which agentic toolkits to enable.
     %     AgentCLI    - Custom command to invoke the agent CLI. Use when the
     %                   agent binary has a non-standard name or path.
@@ -54,6 +55,7 @@ classdef (Sealed) terminal < handle
     %     terminal.getDefaultTheme()          — get current default theme
     %     terminal.verify()         — verify binary integrity against GitHub release
     %     terminal.test()          — run the built-in test suite with report
+    %     terminal.agentOptions()            — show saved agent/toolkit config
     %     terminal.resetAgentOptions()      — clear preferences, re-run wizard
     %     terminal.updateAgenticToolkit()   — update installed agentic toolkit(s)
     %
@@ -204,7 +206,7 @@ classdef (Sealed) terminal < handle
                 elseif isfield(config, 'toolkits')
                     requestedToolkits = string(fieldnames(config.toolkits));
                 else
-                    requestedToolkits = "matlab";
+                    requestedToolkits = terminal.defaultToolkits();
                 end
 
                 % First run with no agent — run the interactive wizard.
@@ -919,6 +921,25 @@ classdef (Sealed) terminal < handle
             %
             %   Returns a (possibly empty) array of terminal handles.
             terminals = terminal.registry('get');
+        end
+
+        function opts = agentOptions()
+            %AGENTOPTIONS Display saved agentic configuration.
+            %
+            %   terminal.agentOptions()
+            %
+            %   Shows the configured agent and toolkits.
+            if ~ispref('terminal', 'AgentOptions')
+                fprintf('No agent options configured. Run terminal(Agentic=true) to set up.\n');
+                opts = [];
+                return
+            end
+            opts = getpref('terminal', 'AgentOptions');
+            if nargout == 0
+                fprintf('  Agent:    %s\n', string(opts.Agent));
+                fprintf('  Toolkits: %s\n', strjoin(string(opts.Toolkits), ", "));
+                clear opts
+            end
         end
 
         function resetAgentOptions()
@@ -1859,9 +1880,15 @@ classdef (Sealed) terminal < handle
                 fprintf('  [1] MATLAB (testing, debugging, code review, apps, Live Scripts)\n');
                 fprintf('  [2] Simulink (model building, testing, MBD workflows)\n');
                 fprintf('  [3] Both\n');
-                reply = input(sprintf('  Select [1]: '), 's');
+                defaultTk = numel(terminal.defaultToolkits());
+                if defaultTk == 2
+                    defaultIdx = 3;
+                else
+                    defaultIdx = 1;
+                end
+                reply = input(sprintf('  Select [%d]: ', defaultIdx), 's');
                 if isempty(reply)
-                    tkIdx = 1;
+                    tkIdx = defaultIdx;
                 else
                     tkIdx = str2double(reply);
                 end
@@ -1885,6 +1912,17 @@ classdef (Sealed) terminal < handle
             else
                 fprintf('  terminal(Agent="%s", Toolkits=[%s])\n\n', ...
                     agent, strjoin("""" + toolkits + """", ","));
+            end
+        end
+
+        function toolkits = defaultToolkits()
+            %DEFAULTTOOLKITS Return default toolkits based on installed products.
+            %   Returns ["matlab","simulink"] if Simulink is installed,
+            %   otherwise returns "matlab".
+            if ~isempty(ver('simulink'))
+                toolkits = ["matlab", "simulink"];
+            else
+                toolkits = "matlab";
             end
         end
 
@@ -2610,6 +2648,11 @@ classdef (Sealed) terminal < handle
 
             agent = string(agent);
             home = terminal.userHome();
+            toolkits = string(fieldnames(toolkitPaths));
+
+            fprintf('\nSetup complete.\n');
+            fprintf('  Agent:    %s\n', agent);
+            fprintf('  Toolkits: %s\n', strjoin(toolkits, ", "));
 
             fprintf('\nTo undo this setup:\n');
 
