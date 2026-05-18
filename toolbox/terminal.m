@@ -35,7 +35,8 @@ classdef (Sealed) terminal < handle
     %                   saved for subsequent runs. Default: false.
     %     Agent       - "claude"|"amp"|"gemini"
     %                   Skips the wizard. Implies Agentic=true.
-    %     Toolkits    - ["matlab"] (default), ["simulink"], or ["matlab","simulink"]
+    %     Toolkits    - ["matlab"] or ["matlab","simulink"] (default includes
+    %                   Simulink when installed), or ["simulink"] alone
     %                   Which agentic toolkits to enable.
     %     AgentCLI    - Custom command to invoke the agent CLI. Use when the
     %                   agent binary has a non-standard name or path.
@@ -54,6 +55,7 @@ classdef (Sealed) terminal < handle
     %     terminal.getDefaultTheme()          — get current default theme
     %     terminal.verify()         — verify binary integrity against GitHub release
     %     terminal.test()          — run the built-in test suite with report
+    %     terminal.agentOptions()            — show saved agent/toolkit config
     %     terminal.resetAgentOptions()      — clear preferences, re-run wizard
     %     terminal.updateAgenticToolkit()   — update installed agentic toolkit(s)
     %
@@ -160,114 +162,145 @@ classdef (Sealed) terminal < handle
             end
 
             % --- Agentic: full agent integration with toolkits ---
-            if options.Agent ~= ""
+            if options.Agent ~= "" || ~isempty(options.Toolkits)
                 options.Agentic = true;
             end
             if options.Agentic
-                % Phase 1: Ensure install root and detect existing state
                 terminal.migrateOldLayout();
                 config = terminal.readAgenticConfig();
 
-                % Determine if full setup is needed or just session re-init.
-                alreadyConfigured = isfield(config, 'mcpServerVersion') ...
-                    && isfield(config, 'toolkits');
+                isFirstRun = ~isfield(config, 'mcpServerVersion') ...
+                    || ~isfield(config, 'toolkits');
 
-                if alreadyConfigured
-                    % Fast path: share session and initialize toolkits only.
-                    try
-                        shareMATLABSession();
-                    catch me
-                        error('Terminal:MCPShareFailed', ...
-                            'Failed to share MATLAB session:\n  %s', me.message);
-                    end
-                    fprintf('MATLAB session shared for AI agent access.\n\n');
-
-                    % Re-initialize Simulink toolkit if enabled.
-                    toolkits = string(fieldnames(config.toolkits));
-                    if ismember("simulink", toolkits)
-                        toolkitPath = fullfile(terminal.agenticInstallRoot(), 'simulink');
-                        if isfolder(toolkitPath)
-                            terminal.initializeSimulinkToolkit(toolkitPath);
-                        end
-                    end
-                else
-                    % Full setup path (first run).
-
-                    % Phase 2: MCP Server Binary
+                % First-run only: install MCP server and MATLAB-side components.
+                if isFirstRun
                     serverBin = terminal.ensureMCPServerBinary(config);
-
-                    % Phase 3: Install MATLAB-side components (shareMATLABSession)
                     terminal.runSetupMatlabIfNeeded(serverBin);
+                end
 
-                    % Phase 4: Share the MATLAB session
-                    try
-                        shareMATLABSession();
-                    catch me
-                        error('Terminal:MCPShareFailed', ...
-                            'Failed to share MATLAB session:\n  %s', me.message);
+                % Always: share the MATLAB session.
+                try
+                    shareMATLABSession();
+                catch me
+                    error('Terminal:MCPShareFailed', ...
+                        'Failed to share MATLAB session:\n  %s', me.message);
+                end
+                fprintf('MATLAB session shared for AI agent access.\n\n');
+
+                % Resolve requested agent and toolkits.
+                % Priority: explicit option > saved pref > config > wizard/default.
+                if options.Agent ~= ""
+                    requestedAgent = options.Agent;
+                elseif ispref('terminal', 'AgentOptions')
+                    requestedAgent = string(terminal.getAgentOptions().Agent);
+                elseif isfield(config, 'agent')
+                    requestedAgent = string(config.agent);
+                else
+                    requestedAgent = "";
+                end
+
+                if ~isempty(options.Toolkits)
+                    requestedToolkits = options.Toolkits;
+                elseif ispref('terminal', 'AgentOptions')
+                    requestedToolkits = string(terminal.getAgentOptions().Toolkits);
+                elseif isfield(config, 'toolkits')
+                    requestedToolkits = string(fieldnames(config.toolkits));
+                else
+                    requestedToolkits = terminal.defaultToolkits();
+                end
+
+                % First run with no agent — run the interactive wizard.
+                if isFirstRun && requestedAgent == ""
+                    wizardOpts = terminal.agenticWizard(options.Toolkits);
+                    requestedAgent = string(wizardOpts.Agent);
+                    requestedToolkits = string(wizardOpts.Toolkits);
+                end
+
+                % Validate agent choice.
+                if requestedAgent ~= ""
+                    terminal.validateAgentOptions(struct( ...
+                        'Agent', requestedAgent, 'Toolkits', {requestedToolkits}));
+                end
+
+                % Detect what changed relative to saved config.
+                if isFirstRun
+                    newToolkits = requestedToolkits;
+                    needsSetup = true;
+                else
+                    savedToolkits = string(fieldnames(config.toolkits));
+                    savedAgent = "";
+                    if isfield(config, 'agent'), savedAgent = string(config.agent); end
+                    newToolkits = setdiff(requestedToolkits, savedToolkits);
+                    agentChanged = requestedAgent ~= "" && savedAgent ~= requestedAgent;
+                    needsSetup = ~isempty(newToolkits) || agentChanged;
+                end
+
+                if needsSetup && requestedAgent ~= ""
+                    % Ensure MCP server binary is available.
+                    if ~exist('serverBin', 'var')
+                        serverBin = terminal.ensureMCPServerBinary(config);
                     end
-                    fprintf('MATLAB session shared for AI agent access.\n\n');
 
-                    % Phase 5: Agent options (saved prefs, explicit, or wizard)
-                    if options.Agent ~= ""
-                        toolkitsList = options.Toolkits;
-                        if isempty(toolkitsList), toolkitsList = "matlab"; end
-                        agentOpts = struct('Agent', options.Agent, ...
-                            'Toolkits', {toolkitsList});
-                        terminal.validateAgentOptions(agentOpts);
-                        terminal.setAgentOptions(agentOpts);
-                    elseif ispref('terminal', 'AgentOptions')
-                        agentOpts = terminal.getAgentOptions();
-                    else
-                        agentOpts = terminal.agenticWizard();
-                    end
-
-                    % Phase 6: Agentic Toolkits
+                    % Download toolkits (only force-download new ones).
                     toolkitPaths = struct();
-                    toolkits = string(agentOpts.Toolkits);
-                    if ismember("matlab", toolkits)
-                        toolkitPaths.matlab = terminal.ensureAgenticToolkit("matlab");
+                    for tk = requestedToolkits
+                        toolkitPaths.(tk) = terminal.ensureAgenticToolkit( ...
+                            tk, ismember(tk, newToolkits));
                     end
-                    if ismember("simulink", toolkits)
-                        toolkitPaths.simulink = terminal.ensureAgenticToolkit("simulink");
+
+                    % Initialize Simulink toolkit if active.
+                    if ismember("simulink", requestedToolkits)
                         terminal.initializeSimulinkToolkit(toolkitPaths.simulink);
                     end
 
-                    % Phase 7: Build merged extension file + marketplace manifest
-                    extensionFile = terminal.mergeExtensionFiles(toolkits, toolkitPaths);
+                    % Build merged extension file and register with agent.
+                    extensionFile = terminal.mergeExtensionFiles(requestedToolkits, toolkitPaths);
                     terminal.mergeMarketplace(toolkitPaths);
 
-                    % Phase 8: Register with agent
-                    if options.AgentCLI ~= "" && agentOpts.Agent ~= "claude"
+                    if options.AgentCLI ~= "" && requestedAgent ~= "claude"
                         warning('Terminal:AgentCLIIgnored', ...
                             'AgentCLI is only supported for Agent="claude". It will be ignored.');
                         options.AgentCLI = "";
                     end
                     agentCLI = terminal.resolveAgentCLI( ...
-                        agentOpts.Agent, options.AgentCLI, config);
+                        requestedAgent, options.AgentCLI, config);
                     obj.MCPCommand = terminal.buildAgentRegistration( ...
-                        agentOpts.Agent, serverBin, extensionFile, toolkitPaths, agentCLI);
+                        requestedAgent, serverBin, extensionFile, toolkitPaths, agentCLI);
 
-                    % Phase 9: Persist state to config.json
+                    % Persist state to config.json.
+                    config.agent = char(requestedAgent);
                     if options.AgentCLI ~= ""
                         config.agentCLI = options.AgentCLI;
                     end
-                    config.mcpServerVersion = terminal.parseMCPVersion(serverBin);
-                    try
-                        mlVer = char(matlabRelease.Release);
-                    catch
-                        mlVer = ['R' version('-release')];
+                    if isFirstRun
+                        config.mcpServerVersion = terminal.parseMCPVersion(serverBin);
+                        try
+                            mlVer = char(matlabRelease.Release);
+                        catch
+                            mlVer = ['R' version('-release')];
+                        end
+                        config.matlab = struct('root', matlabroot, 'version', mlVer);
+                        config.sessionMode = 'existing';
                     end
-                    config.matlab = struct('root', matlabroot, 'version', mlVer);
-                    config.sessionMode = 'existing';
                     if ~isfield(config, 'toolkits')
                         config.toolkits = struct();
                     end
-                    for tk = toolkits
+                    for tk = requestedToolkits
                         config.toolkits.(char(tk)) = struct( ...
                             'version', 'managed', 'source', 'release');
                     end
                     terminal.writeAgenticConfig(config);
+                    terminal.setAgentOptions(struct('Agent', requestedAgent, ...
+                        'Toolkits', {requestedToolkits}));
+                else
+                    % No changes needed — just init Simulink if active.
+                    if isfield(config, 'toolkits') ...
+                            && ismember("simulink", string(fieldnames(config.toolkits)))
+                        toolkitPath = fullfile(terminal.agenticInstallRoot(), 'simulink');
+                        if isfolder(toolkitPath)
+                            terminal.initializeSimulinkToolkit(toolkitPath);
+                        end
+                    end
                 end
             end
 
@@ -888,6 +921,25 @@ classdef (Sealed) terminal < handle
             %
             %   Returns a (possibly empty) array of terminal handles.
             terminals = terminal.registry('get');
+        end
+
+        function opts = agentOptions()
+            %AGENTOPTIONS Display saved agentic configuration.
+            %
+            %   terminal.agentOptions()
+            %
+            %   Shows the configured agent and toolkits.
+            if ~ispref('terminal', 'AgentOptions')
+                fprintf('No agent options configured. Run terminal(Agentic=true) to set up.\n');
+                opts = [];
+                return
+            end
+            opts = getpref('terminal', 'AgentOptions');
+            if nargout == 0
+                fprintf('  Agent:    %s\n', string(opts.Agent));
+                fprintf('  Toolkits: %s\n', strjoin(string(opts.Toolkits), ", "));
+                clear opts
+            end
         end
 
         function resetAgentOptions()
@@ -1788,8 +1840,14 @@ classdef (Sealed) terminal < handle
             end
         end
 
-        function opts = agenticWizard()
+        function opts = agenticWizard(explicitToolkits)
             %AGENTICWIZARD Interactive first-run setup for Agentic=true.
+            %   agenticWizard() — ask agent + toolkits
+            %   agenticWizard(toolkits) — ask agent only, use provided toolkits
+            arguments
+                explicitToolkits (1,:) string = string.empty
+            end
+
             fprintf('\n');
             fprintf('Agentic Toolkit Setup\n');
             fprintf('======================\n\n');
@@ -1814,24 +1872,35 @@ classdef (Sealed) terminal < handle
             fprintf('  Selected: %s\n\n', labels(idx));
 
             % --- Toolkit selection ---
-            fprintf('Which toolkits do you want to enable?\n');
-            fprintf('  [1] MATLAB (testing, debugging, code review, apps, Live Scripts)\n');
-            fprintf('  [2] Simulink (model building, testing, MBD workflows)\n');
-            fprintf('  [3] Both\n');
-            reply = input(sprintf('  Select [1]: '), 's');
-            if isempty(reply)
-                tkIdx = 1;
+            if ~isempty(explicitToolkits)
+                toolkits = explicitToolkits;
+                fprintf('Toolkits: %s\n\n', strjoin(toolkits, ", "));
             else
-                tkIdx = str2double(reply);
+                fprintf('Which toolkits do you want to enable?\n');
+                fprintf('  [1] MATLAB (testing, debugging, code review, apps, Live Scripts)\n');
+                fprintf('  [2] Simulink (model building, testing, MBD workflows)\n');
+                fprintf('  [3] Both\n');
+                defaultTk = numel(terminal.defaultToolkits());
+                if defaultTk == 2
+                    defaultIdx = 3;
+                else
+                    defaultIdx = 1;
+                end
+                reply = input(sprintf('  Select [%d]: ', defaultIdx), 's');
+                if isempty(reply)
+                    tkIdx = defaultIdx;
+                else
+                    tkIdx = str2double(reply);
+                end
+                switch tkIdx
+                    case 1, toolkits = "matlab";
+                    case 2, toolkits = "simulink";
+                    case 3, toolkits = ["matlab", "simulink"];
+                    otherwise
+                        error('Terminal:InvalidSelection', 'Invalid selection.');
+                end
+                fprintf('  Selected: %s\n\n', strjoin(toolkits, ", "));
             end
-            switch tkIdx
-                case 1, toolkits = "matlab";
-                case 2, toolkits = "simulink";
-                case 3, toolkits = ["matlab", "simulink"];
-                otherwise
-                    error('Terminal:InvalidSelection', 'Invalid selection.');
-            end
-            fprintf('  Selected: %s\n\n', strjoin(toolkits, ", "));
 
             opts = struct('Agent', agent, 'Toolkits', {toolkits});
             terminal.setAgentOptions(opts);
@@ -1843,6 +1912,17 @@ classdef (Sealed) terminal < handle
             else
                 fprintf('  terminal(Agent="%s", Toolkits=[%s])\n\n', ...
                     agent, strjoin("""" + toolkits + """", ","));
+            end
+        end
+
+        function toolkits = defaultToolkits()
+            %DEFAULTTOOLKITS Return default toolkits based on installed products.
+            %   Returns ["matlab","simulink"] if Simulink is installed,
+            %   otherwise returns "matlab".
+            if ~isempty(ver('simulink'))
+                toolkits = ["matlab", "simulink"];
+            else
+                toolkits = "matlab";
             end
         end
 
@@ -2568,6 +2648,11 @@ classdef (Sealed) terminal < handle
 
             agent = string(agent);
             home = terminal.userHome();
+            toolkits = string(fieldnames(toolkitPaths));
+
+            fprintf('\nSetup complete.\n');
+            fprintf('  Agent:    %s\n', agent);
+            fprintf('  Toolkits: %s\n', strjoin(toolkits, ", "));
 
             fprintf('\nTo undo this setup:\n');
 
