@@ -160,7 +160,7 @@ classdef (Sealed) terminal < handle
             end
 
             % --- Agentic: full agent integration with toolkits ---
-            if options.Agent ~= ""
+            if options.Agent ~= "" || ~isempty(options.Toolkits)
                 options.Agentic = true;
             end
             if options.Agentic
