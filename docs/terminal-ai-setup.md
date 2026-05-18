@@ -56,10 +56,11 @@ The custom CLI path is persisted in `config.json` and reused on subsequent runs.
 
 ## Toolkits
 
-By default, only the MATLAB toolkit is installed. Add Simulink at any time:
+By default, Terminal installs the MATLAB toolkit. If Simulink is installed in the running MATLAB, the Simulink toolkit is also included automatically. You can override this by specifying toolkits explicitly:
 
 ```matlab
-t = terminal(Toolkits=["matlab","simulink"]);
+t = terminal(Toolkits="matlab");                    % MATLAB only
+t = terminal(Toolkits=["matlab","simulink"]);       % both
 ```
 
 Terminal downloads the toolkit, rebuilds the merged extension file, and re-registers with your agent automatically.
@@ -83,7 +84,13 @@ Terminal adds these read-only editor tools to the MCP server, giving agents visi
 | `matlab_editor_selection` | Get the currently highlighted text |
 | `matlab_editor_read` | Read contents of an open file (reflects unsaved edits) |
 
-## Reset
+## Inspect and Reset
+
+View the current saved configuration:
+
+```matlab
+terminal.agentOptions()
+```
 
 To wipe all saved state and start fresh:
 
