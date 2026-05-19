@@ -1419,21 +1419,6 @@ classdef (Sealed) terminal < handle
             end
         end
 
-        function cleanupLegacyPrefdir()
-            %CLEANUPLEGACYPREFDIR Remove pre-v0.13 artifact directories from prefdir.
-            %   Pre-v0.13 stored runtime artifacts under three separate prefdir
-            %   roots. Remove this function once pre-v0.13 installs are rare.
-            dirs = {
-                fullfile(prefdir, 'matlab-terminal')
-                fullfile(prefdir, 'matlab-mcp')
-                fullfile(prefdir, 'Terminal')
-            };
-            for i = 1:numel(dirs)
-                if isfolder(dirs{i})
-                    try rmdir(dirs{i}, 's'); catch, end
-                end
-            end
-        end
 
         function p = toolboxDir()
             %TOOLBOXDIR Return the directory containing terminal.m.
@@ -1550,35 +1535,38 @@ classdef (Sealed) terminal < handle
                 return;
             end
 
-            stdinNull = terminal.stdinRedirect();
-            cmd = sprintf('"%s" --setup-matlab --matlab-root="%s" %s', ...
+            if ispc
+                stdinNull = '<nul';
+            else
+                stdinNull = '</dev/null';
+            end
+            cmd = sprintf('"%s" --setup-matlab --matlab-root="%s" %s 2>&1', ...
                 serverBin, matlabroot, stdinNull);
             fprintf('Installing MATLAB MCP Core Server Toolbox...\n This may take a minute — please wait.\n');
             [status, output] = system(cmd);
             if status ~= 0
-                warning('Terminal:SetupMatlabFailed', ...
-                    '--setup-matlab failed:\n  %s', strtrim(output));
+                warning('Terminal:SetupMatlabWarning', ...
+                    'MCP server binary exited with code %d:\n  %s', ...
+                    status, strtrim(output));
+            end
+
+            % Add the newly installed toolbox to the path so we don't
+            % need a MATLAB restart. The binary may report a non-zero exit
+            % code yet still install the toolbox successfully, so always
+            % check the expected location.
+            toolboxesDir = fileparts(fileparts(which('terminal')));
+            listing = dir(toolboxesDir);
+            names = {listing.name};
+            matches = ~cellfun(@isempty, regexp(names, '^MATLAB[_ ]MCP[_ ]Core[_ ]Server[_ ]Toolbox'));
+            if any(matches)
+                matched = names(matches);
+                mcpToolboxDir = fullfile(toolboxesDir, matched{1});
+                addpath(mcpToolboxDir);
+                fprintf('MATLAB MCP Core Server Toolbox installed.\n');
             else
-                % Add the newly installed toolbox to the path so we don't
-                % need a MATLAB restart. Both toolboxes live under the same
-                % Add-Ons/Toolboxes/ parent directory.
-                % Find the MCP toolbox folder. Name may include a version
-                % suffix (e.g., "MATLAB MCP Core Server Toolbox@1.0.0")
-                % depending on the MATLAB release.
-                toolboxesDir = fileparts(fileparts(which('terminal')));
-                listing = dir(toolboxesDir);
-                names = {listing.name};
-                matches = ~cellfun(@isempty, regexp(names, '^MATLAB[_ ]MCP[_ ]Core[_ ]Server[_ ]Toolbox'));
-                if any(matches)
-                    matched = names(matches);
-                    mcpToolboxDir = fullfile(toolboxesDir, matched{1});
-                    addpath(mcpToolboxDir);
-                    fprintf('MATLAB MCP Core Server Toolbox installed.\n');
-                else
-                    error('Terminal:MCPToolboxNotFound', ...
-                        'MATLAB MCP Core Server Toolbox was not found in:\n  %s\n--setup-matlab may have failed to install correctly.', ...
-                        toolboxesDir);
-                end
+                error('Terminal:SetupMatlabFailed', ...
+                    'Unable to install the MATLAB MCP Core Server Toolbox.\n  The MCP server binary at:\n    %s\n  exited with code %d:\n    %s', ...
+                    serverBin, status, strtrim(output));
             end
         end
 
@@ -2810,29 +2798,24 @@ classdef (Sealed) terminal < handle
                 return;
             end
 
+            % Newer MATLAB versions may install toolboxes read-only.
+            % Fix folder permissions upfront so rmdir and file writes succeed.
+            if isMATLABReleaseOlderThan("R2026a")
+                fileattrib(fullfile(cacheRoot, '*'), '+w', '', 's');
+            else
+                perms = filePermissions(cacheRoot);
+                setPermissions(perms, "Writable", true, PermissionsTarget="folders");
+            end
+
             % Clear previously extracted assets before re-extracting.
             % Only remove html/ and the server binary directory.
             serverBinDir = fullfile(cacheRoot, 'bin', 'matlab-terminal-server');
             if isfolder(cacheDir), rmdir(cacheDir, 's'); end
             if isfolder(serverBinDir), rmdir(serverBinDir, 's'); end
 
-            terminal.cleanupLegacyPrefdir();
-
             fprintf('Extracting Terminal assets to:\n  %s\n', cacheRoot);
 
-            try
-                terminal.extractToDir(cacheRoot, matFile);
-            catch ME
-                if contains(ME.message, 'permission', 'IgnoreCase', true)
-                    % Newer MATLAB versions may install toolboxes read-only.
-                    % Use setPermissions (R2025a+) to make the directory writable.
-                    perms = filePermissions(cacheRoot);
-                    setPermissions(perms, "Writable", true, PermissionsTarget="folders");
-                    terminal.extractToDir(cacheRoot, matFile);
-                else
-                    rethrow(ME);
-                end
-            end
+            terminal.extractToDir(cacheRoot, matFile);
 
             % Strip macOS quarantine from the extracted server binary.
             % Downloaded .mltbx files inherit com.apple.quarantine, which
