@@ -58,6 +58,7 @@ classdef (Sealed) terminal < handle
     %     terminal.agentOptions()            — show saved agent/toolkit config
     %     terminal.resetAgentOptions()      — clear preferences, re-run wizard
     %     terminal.updateAgenticToolkit()   — update installed agentic toolkit(s)
+    %     terminal.updateMCPServer()         — update MCP server binary to latest
     %
     %   Examples:
     %     t = terminal();
@@ -982,6 +983,104 @@ classdef (Sealed) terminal < handle
             end
         end
 
+        function updateMCPServer()
+            %UPDATEMCPSERVER Update the MCP server binary to the latest release.
+            %
+            %   terminal.updateMCPServer()
+
+            serverBin = terminal.mcpBinaryPath();
+
+            % Check current version.
+            currentVer = '';
+            if isfile(serverBin)
+                currentVer = terminal.parseMCPVersion(serverBin);
+            end
+
+            % Fetch latest release directly (no fallback — user wants the latest).
+            url = sprintf('https://api.github.com/repos/%s/releases/latest', ...
+                terminal.MCP_SERVER_REPO);
+            try
+                opts = weboptions('ContentType', 'json', 'Timeout', 15);
+                release = webread(url, opts);
+            catch me
+                error('Terminal:MCPUpdateFailed', ...
+                    'Unable to check for updates:\n  %s\n  Try again later.', me.message);
+            end
+            latestVer = strrep(release.tag_name, 'v', '');
+
+            if ~isempty(currentVer) && terminal.compareVersions(currentVer, latestVer) >= 0
+                fprintf('MCP server is already up to date (v%s).\n', currentVer);
+                return;
+            end
+
+            if ~isempty(currentVer)
+                fprintf('Updating MCP server from v%s to %s...\n', currentVer, release.tag_name);
+            else
+                fprintf('Downloading MCP server %s...\n', release.tag_name);
+            end
+
+            % Determine platform asset name.
+            arch = computer('arch');
+            switch arch
+                case 'glnxa64', assetSuffix = '-glnxa64';
+                case 'maca64',  assetSuffix = '-maca64';
+                case 'maci64',  assetSuffix = '-maci64';
+                case 'win64',   assetSuffix = '-win64.exe';
+                otherwise
+                    error('Terminal:UnsupportedPlatform', ...
+                        'Unsupported platform: %s', arch);
+            end
+
+            assetName = [terminal.MCP_SERVER_BINARY assetSuffix];
+            binaryURL = terminal.findMCPAsset(release, assetName);
+            if isempty(binaryURL)
+                error('Terminal:MCPDownloadFailed', ...
+                    'No binary asset "%s" found in release %s.', assetName, release.tag_name);
+            end
+
+            % Remove existing binary (handle Windows locking).
+            if isfile(serverBin)
+                try
+                    delete(serverBin);
+                catch
+                    if ispc
+                        try
+                            movefile(serverBin, [serverBin '.old'], 'f');
+                        catch
+                            error('Terminal:BinaryLocked', ...
+                                ['Cannot replace the MCP server binary because it is in use.\n' ...
+                                 'Close any running coding agent sessions and try again.']);
+                        end
+                    else
+                        error('Terminal:BinaryDeleteFailed', ...
+                            'Cannot remove existing binary: %s', serverBin);
+                    end
+                end
+            end
+
+            % Download.
+            binDir = fileparts(serverBin);
+            if ~isfolder(binDir)
+                mkdir(binDir);
+            end
+            fprintf('  Downloading %s %s for %s...\n', ...
+                terminal.MCP_SERVER_BINARY, release.tag_name, arch);
+            try
+                websave(serverBin, binaryURL);
+            catch me
+                error('Terminal:MCPDownloadFailed', 'Download failed:\n  %s', me.message);
+            end
+
+            % Make executable and strip quarantine on macOS.
+            if ~ispc
+                system(sprintf('chmod +x "%s"', serverBin));
+                if ismac
+                    system(sprintf('xattr -d com.apple.quarantine "%s" 2>/dev/null', serverBin));
+                end
+            end
+            fprintf('MCP server updated to %s at:\n  %s\n', release.tag_name, serverBin);
+        end
+
         function closeAll()
             %CLOSEALL Close all running terminal instances.
             %
@@ -1753,6 +1852,8 @@ classdef (Sealed) terminal < handle
 
         function release = fetchMCPRelease()
             %FETCHMCPRELEASE Fetch the latest MCP Core Server release from GitHub.
+            %   On rate-limit or network failure, returns a synthetic release
+            %   struct using the minimum supported version and direct download URLs.
             persistent cachedRelease
             if ~isempty(cachedRelease)
                 release = cachedRelease;
@@ -1765,9 +1866,38 @@ classdef (Sealed) terminal < handle
                 release = webread(url, opts);
                 cachedRelease = release;
             catch me
-                error('Terminal:MCPDownloadFailed', ...
-                    'Could not reach GitHub for MCP Core Server:\n  %s', me.message);
+                if contains(me.message, 'rate limit', 'IgnoreCase', true)
+                    % GitHub API rate-limited — fall back to direct download
+                    % URLs using the minimum supported version.
+                    warning('Terminal:GitHubAPIUnavailable', ...
+                        ['GitHub API rate limit exceeded.\n' ...
+                         '  Falling back to minimum supported version v%s.\n' ...
+                         '  Run terminal.updateMCPServer() later to get the latest.'], ...
+                        terminal.MCP_MIN_SERVER_VERSION);
+                    release = terminal.buildFallbackMCPRelease();
+                    cachedRelease = release;
+                else
+                    error('Terminal:MCPDownloadFailed', ...
+                        'Could not reach GitHub for MCP Core Server:\n  %s', me.message);
+                end
             end
+        end
+
+        function release = buildFallbackMCPRelease()
+            %BUILDFALLBACKMCPRELEASE Construct a synthetic release struct for direct download.
+            tag = ['v' terminal.MCP_MIN_SERVER_VERSION];
+            baseURL = sprintf('https://github.com/%s/releases/download/%s/', ...
+                terminal.MCP_SERVER_REPO, tag);
+            bin = terminal.MCP_SERVER_BINARY;
+            platforms = {'glnxa64', 'maca64', 'maci64', 'win64'};
+            suffixes  = {'-glnxa64', '-maca64', '-maci64', '-win64.exe'};
+            assets = struct('name', {}, 'browser_download_url', {});
+            for i = 1:numel(platforms)
+                assets(i).name = [bin suffixes{i}];
+                assets(i).browser_download_url = [baseURL bin suffixes{i}];
+            end
+            release.tag_name = tag;
+            release.assets = assets;
         end
 
         function url = findMCPAsset(release, namePattern)
@@ -1952,28 +2082,42 @@ classdef (Sealed) terminal < handle
 
             % Fetch latest release.
             apiURL = sprintf('https://api.github.com/repos/%s/releases/latest', repo);
+            webOpts = weboptions('ContentType', 'json', 'Timeout', 15);
+            release = [];
             try
-                webOpts = weboptions('ContentType', 'json', 'Timeout', 15);
                 release = webread(apiURL, webOpts);
             catch me
-                error('Terminal:AgenticDownloadFailed', ...
-                    'Could not reach GitHub for %s:\n  %s', displayName, me.message);
-            end
-
-            fprintf('Downloading %s %s...\n', displayName, release.tag_name);
-
-            % Determine download URL: prefer zip asset, fall back to zipball.
-            downloadURL = '';
-            if isfield(release, 'assets') && ~isempty(release.assets)
-                for i = 1:numel(release.assets)
-                    if endsWith(release.assets(i).name, '.zip')
-                        downloadURL = release.assets(i).browser_download_url;
-                        break;
-                    end
+                if contains(me.message, 'rate limit', 'IgnoreCase', true)
+                    warning('Terminal:GitHubAPIUnavailable', ...
+                        ['GitHub API rate limit exceeded.\n' ...
+                         '  Downloading %s from main branch instead.\n' ...
+                         '  Run terminal.updateAgenticToolkit("%s") later to get the latest release.'], ...
+                        displayName, toolkit);
+                else
+                    error('Terminal:AgenticDownloadFailed', ...
+                        'Could not reach GitHub for %s:\n  %s', displayName, me.message);
                 end
             end
-            if isempty(downloadURL)
-                downloadURL = release.zipball_url;
+
+            % Determine download URL: prefer release zip asset, fall back
+            % to release zipball, or main branch archive if API unavailable.
+            downloadURL = '';
+            if ~isempty(release)
+                fprintf('Downloading %s %s...\n', displayName, release.tag_name);
+                if isfield(release, 'assets') && ~isempty(release.assets)
+                    for i = 1:numel(release.assets)
+                        if endsWith(release.assets(i).name, '.zip')
+                            downloadURL = release.assets(i).browser_download_url;
+                            break;
+                        end
+                    end
+                end
+                if isempty(downloadURL)
+                    downloadURL = release.zipball_url;
+                end
+            else
+                fprintf('Downloading %s from main branch...\n', displayName);
+                downloadURL = sprintf('https://github.com/%s/archive/refs/heads/main.zip', repo);
             end
 
             % Download to temp file.
@@ -2026,7 +2170,11 @@ classdef (Sealed) terminal < handle
                 rmdir(tmpExtract, 's');
             end
 
-            fprintf('%s %s installed at:\n  %s\n\n', displayName, release.tag_name, toolkitPath);
+            if ~isempty(release)
+                fprintf('%s %s installed at:\n  %s\n\n', displayName, release.tag_name, toolkitPath);
+            else
+                fprintf('%s installed at:\n  %s\n\n', displayName, toolkitPath);
+            end
         end
 
         function initializeSimulinkToolkit(toolkitPath)
