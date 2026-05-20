@@ -604,8 +604,10 @@ classdef (Sealed) terminal < handle
             end
 
             % Build the URL served by the Go server's --static-dir.
-            serverUrl = sprintf('http://127.0.0.1:%d/static/index.html?port=%d&token=%s&tls=0', ...
-                obj.ServerProcess.port, obj.ServerProcess.port, obj.AuthToken);
+            themeConfig = internal.TerminalThemes.resolve(obj.Theme);
+            themeJson = urlencode(jsonencode(themeConfig));
+            serverUrl = sprintf('http://127.0.0.1:%d/static/index.html?port=%d&token=%s&tls=0&theme=%s', ...
+                obj.ServerProcess.port, obj.ServerProcess.port, obj.AuthToken, themeJson);
             % Store schema source data for getDialogSchema.
             obj.SimulinkURL = serverUrl;
 

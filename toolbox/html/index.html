@@ -585,10 +585,11 @@
             fontSize: 14
         };
 
-        function connectStandalone(port, token, useTLS) {
+        function connectStandalone(port, token, useTLS, theme) {
             dbg('Standalone mode: port=' + port + ' tls=' + useTLS);
-            config = { theme: defaultStandaloneTheme };
-            applyTheme(config.theme);
+            var t = theme || defaultStandaloneTheme;
+            config = { theme: t };
+            applyTheme(t);
             transport = new WebSocketTransport(port, token, useTLS);
             transport.connect();
         }
@@ -621,9 +622,15 @@
 
             if (port && token) {
                 var useTLS = tls !== '0' && tls !== 'false';
+                // Parse theme from URL param if provided (JSON-encoded).
+                var standaloneTheme = null;
+                try {
+                    var themeParam = params.get('theme');
+                    if (themeParam) standaloneTheme = JSON.parse(themeParam);
+                } catch (e) {}
                 setTimeout(function () {
                     if (transport) return;
-                    connectStandalone(port, token, useTLS);
+                    connectStandalone(port, token, useTLS, standaloneTheme);
                 }, 200);
                 return;
             }
