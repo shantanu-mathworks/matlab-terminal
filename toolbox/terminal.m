@@ -437,7 +437,7 @@ classdef (Sealed) terminal < handle
 
             % --- Branch: Simulink DDG panel vs MATLAB uihtml ---
             if obj.Place == "simulink"
-                obj.initSimulinkPanel();
+                obj.initSimulinkPanel(options.Name);
             else
                 obj.initMATLABPanel(parent, options, htmlFile);
             end
@@ -567,7 +567,7 @@ classdef (Sealed) terminal < handle
             start(obj.InitTimer);
         end
 
-        function initSimulinkPanel(obj)
+        function initSimulinkPanel(obj, panelTitle)
             %INITSIMULINKPANEL Dock terminal in Simulink editor via DDG webbrowser.
             %   The Go server serves index.html via --static-dir. The DDG
             %   webbrowser loads it with ?port=&token=&tls=0 params, triggering
@@ -616,7 +616,7 @@ classdef (Sealed) terminal < handle
             component.DestroyOnHide = true;
             studio.registerComponent(component);
             component.setPreferredSize(600, 400);
-            studio.moveComponentToDock(component, 'Terminal', 'Right', 'Tabbed');
+            studio.moveComponentToDock(component, char(panelTitle), 'Right', 'Tabbed');
             obj.DDGComponent = component;
 
             % Clean up when the panel is destroyed by the Studio.
