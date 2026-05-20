@@ -145,6 +145,7 @@ classdef (Sealed) terminal < handle
                 options.Shell (1,1) string = ""
                 options.Theme = missing
                 options.Place (1,1) string {mustBeMember(options.Place, ["matlab", "simulink"])} = "matlab"
+                options.Model (1,1) string = ""
                 options.Agentic (1,1) logical = false
                 options.Agent (1,1) string = ""
                 options.Toolkits (1,:) string = string.empty
@@ -437,7 +438,7 @@ classdef (Sealed) terminal < handle
 
             % --- Branch: Simulink DDG panel vs MATLAB uihtml ---
             if obj.Place == "simulink"
-                obj.initSimulinkPanel(options.Name);
+                obj.initSimulinkPanel(options.Name, options.Model);
             else
                 obj.initMATLABPanel(parent, options, htmlFile);
             end
@@ -567,20 +568,43 @@ classdef (Sealed) terminal < handle
             start(obj.InitTimer);
         end
 
-        function initSimulinkPanel(obj, panelTitle)
+        function initSimulinkPanel(obj, panelTitle, modelName)
             %INITSIMULINKPANEL Dock terminal in Simulink editor via DDG webbrowser.
             %   The Go server serves index.html via --static-dir. The DDG
             %   webbrowser loads it with ?port=&token=&tls=0 params, triggering
             %   the WebSocketTransport path in JS (MATLAB not in data path).
 
-            % Get active Simulink Studio.
+            % Get Simulink Studio (specific model or most recently active).
             studio = [];
             try
                 studios = DAS.Studio.getAllStudiosSortedByMostRecentlyActive;
-                if ~isempty(studios)
+                if modelName ~= ""
+                    for i = 1:numel(studios)
+                        if startsWith(studios(i).getStudioTitle(), modelName)
+                            studio = studios(i);
+                            break;
+                        end
+                    end
+                    if isempty(studio)
+                        openModels = strings(1, numel(studios));
+                        for j = 1:numel(studios)
+                            t = studios(j).getStudioTitle();
+                            openModels(j) = extractBefore(t, ' - Simulink');
+                            if ismissing(openModels(j))
+                                openModels(j) = string(t);
+                            end
+                        end
+                        error('Terminal:ModelNotFound', ...
+                            'No Simulink editor found for model "%s".\nOpen models: %s', ...
+                            modelName, strjoin(openModels, ', '));
+                    end
+                elseif ~isempty(studios)
                     studio = studios(1);
                 end
             catch ME
+                if startsWith(ME.identifier, 'Terminal:')
+                    rethrow(ME);
+                end
                 error('Terminal:SimulinkNotAvailable', ...
                     'Simulink Studio not available: %s\nOpen a Simulink model first.', ME.message);
             end
