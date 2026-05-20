@@ -105,6 +105,10 @@ classdef (Sealed) terminal < handle
         LastFigureColor    % cached groot DefaultFigureColor for change detection
         ConsecutivePollFailures double = 0  % poll failure counter for server death detection
         IsRestarting logical = false  % true while server restart is in progress
+        Place string = "matlab"  % "matlab" or "simulink"
+        DDGComponent           % GLUE2.DDGComponent handle (Simulink mode only)
+        DDGStudio              % DAS.Studio handle (Simulink mode only)
+        SimulinkURL string = ""  % URL for DDG webbrowser widget
     end
 
     properties (SetAccess = private)
@@ -140,12 +144,14 @@ classdef (Sealed) terminal < handle
                 options.WindowStyle (1,1) string {mustBeMember(options.WindowStyle, ["docked", "normal"])} = "docked"
                 options.Shell (1,1) string = ""
                 options.Theme = missing
+                options.Place (1,1) string {mustBeMember(options.Place, ["matlab", "simulink"])} = "matlab"
                 options.Agentic (1,1) logical = false
                 options.Agent (1,1) string = ""
                 options.Toolkits (1,:) string = string.empty
                 options.AgentCLI (1,1) string = ""
             end
 
+            obj.Place = lower(options.Place);
             obj.Shell = options.Shell;
 
             % Use saved default theme if not explicitly provided.
@@ -305,21 +311,6 @@ classdef (Sealed) terminal < handle
                 end
             end
 
-            % --- Parent container ---
-            if isempty(parent)
-                parent = uifigure('Name', options.Name, ...
-                    'Position', [100 100 800 500]);
-                try
-                    parent.WindowStyle = options.WindowStyle;
-                catch
-                    if options.WindowStyle == "docked"
-                        warning('Terminal:DockNotSupported', ...
-                            'Docked window style is not supported in this MATLAB release. Using normal window.');
-                    end
-                end
-            end
-            obj.ParentFigure = parent;
-
             % --- Auth token (32-char hex, cryptographically random) ---
             obj.AuthToken = terminal.generateToken();
 
@@ -336,6 +327,14 @@ classdef (Sealed) terminal < handle
                     terminal.SERVER_BINARY_NAME);
             end
 
+            % --- Locate web assets ---
+            htmlDir = fullfile(terminal.toolboxDir(), 'html');
+            htmlFile = fullfile(htmlDir, 'index.html');
+            if ~isfile(htmlFile)
+                error('Terminal:HTMLNotFound', ...
+                    'Could not find index.html at:\n  %s', htmlFile);
+            end
+
             % --- Build environment info ---
             matlabPid = num2str(feature('getpid'));
             matlabRoot = matlabroot;
@@ -344,6 +343,11 @@ classdef (Sealed) terminal < handle
             readyFile = [tempname, '.txt'];
             args = sprintf('--env "MATLAB_PID=%s" --env "MATLAB_ROOT=%s" --ready-file "%s"', ...
                 matlabPid, matlabRoot, readyFile);
+
+            % In Simulink mode, serve HTML directly from the Go server.
+            if obj.Place == "simulink"
+                args = sprintf('%s --static-dir "%s"', args, htmlDir);
+            end
 
             % Forward LANG so the PTY inherits the user's locale.
             lang = getenv('LANG');
@@ -426,13 +430,106 @@ classdef (Sealed) terminal < handle
                         'Server did not report a port within %d seconds.', maxWait);
                 end
             end
-            % Clean up log file on success (server keeps running).
-            % Keep it around — it's useful for debugging if something
-            % goes wrong later. It will be cleaned up by the OS.
 
             obj.ServerProcess = struct('pid', serverPid, 'port', port);
             obj.BaseURL = sprintf('http://127.0.0.1:%d', port);
             obj.PollSeq = 0;
+
+            % --- Branch: Simulink DDG panel vs MATLAB uihtml ---
+            if obj.Place == "simulink"
+                obj.initSimulinkPanel();
+            else
+                obj.initMATLABPanel(parent, options, htmlFile);
+            end
+        end
+
+        function set.Theme(obj, value)
+            internal.TerminalThemes.validate(value);
+            obj.Theme = value; %#ok<MCSUP>
+            % Push live update if already initialized.
+            if ~isempty(obj.ThemeConfig) %#ok<MCSUP>
+                newConfig = internal.TerminalThemes.resolve(value);
+                obj.ThemeConfig = newConfig; %#ok<MCSUP>
+                obj.sendToJS(struct('type', 'theme', 'theme', newConfig)); %#ok<MCSUP>
+            end
+        end
+
+        function dlg = getDialogSchema(obj)
+            %GETDIALOGSCHEMA DDG callback — returns webbrowser widget schema.
+            %   Called by the GLUE2.DDGComponent framework when rendering the
+            %   Simulink panel. Only relevant when Place="simulink".
+            src.Type                        = 'webbrowser';
+            src.Tag                         = 'Terminal_SimulinkWebview';
+            src.Url                         = char(obj.SimulinkURL);
+            src.DialogRefresh               = true;
+            src.DisableContextMenu          = false;
+            src.EnableInspectorInContextMenu = true;
+            src.EnableInspectorOnLoad       = false;
+
+            dlg.Items           = {src};
+            dlg.DialogTag       = 'Terminal_SimulinkDialog';
+            dlg.DialogTitle     = '';
+            dlg.EmbeddedButtonSet = {''};
+            dlg.MinMaxButtons   = 1;
+            dlg.IsScrollable    = false;
+        end
+
+        function delete(obj)
+            %DELETE Clean up: stop timer, kill server, close figure.
+            terminal.registry('remove', obj);
+            if ~isempty(obj.InitTimer) && isvalid(obj.InitTimer)
+                stop(obj.InitTimer);
+                delete(obj.InitTimer);
+            end
+            if ~isempty(obj.PollTimer) && isvalid(obj.PollTimer)
+                stop(obj.PollTimer);
+                delete(obj.PollTimer);
+            end
+            if ~isempty(obj.MCPTimer) && isvalid(obj.MCPTimer)
+                stop(obj.MCPTimer);
+                delete(obj.MCPTimer);
+            end
+            if ~isempty(obj.ServerProcess) && isstruct(obj.ServerProcess) ...
+                    && isfield(obj.ServerProcess, 'pid') && ~isnan(obj.ServerProcess.pid)
+                terminal.killProcess(obj.ServerProcess.pid);
+            end
+            % Simulink mode: destroy DDG component (removes panel from editor).
+            if ~isempty(obj.DDGComponent)
+                try
+                    if ~isempty(obj.DDGStudio)
+                        obj.DDGStudio.destroyComponent(obj.DDGComponent);
+                    end
+                catch
+                end
+                obj.DDGComponent = [];
+            end
+            if ~isempty(obj.ParentFigure) && isvalid(obj.ParentFigure)
+                if isprop(obj.ParentFigure, 'CloseRequestFcn')
+                    obj.ParentFigure.CloseRequestFcn = '';
+                end
+                delete(obj.ParentFigure);
+            end
+        end
+    end
+
+    methods (Access = private)
+        function initMATLABPanel(obj, parent, options, htmlFile)
+            %INITMATLABPANEL Standard uihtml-based terminal in a MATLAB figure.
+
+            % --- Parent container ---
+            if isempty(parent)
+                parent = uifigure('Name', options.Name, ...
+                    'Position', [100 100 800 500]);
+                try
+                    parent.WindowStyle = options.WindowStyle;
+                catch
+                    if options.WindowStyle == "docked"
+                        warning('Terminal:DockNotSupported', ...
+                            'Docked window style is not supported in this MATLAB release. Using normal window.');
+                    end
+                end
+            end
+            obj.ParentFigure = parent;
 
             % Pre-create weboptions to avoid re-parsing every call.
             obj.ReadOpts = weboptions('HeaderFields', {'Authorization', obj.AuthToken}, ...
@@ -442,15 +539,6 @@ classdef (Sealed) terminal < handle
 
             % --- Read MATLAB theme / font settings ---
             themeConfig = internal.TerminalThemes.resolve(obj.Theme);
-
-            % --- Locate web assets ---
-            % extractWebAssets (called above) ensures these exist.
-            htmlDir = fullfile(terminal.toolboxDir(), 'html');
-            htmlFile = fullfile(htmlDir, 'index.html');
-            if ~isfile(htmlFile)
-                error('Terminal:HTMLNotFound', ...
-                    'Could not find index.html at:\n  %s', htmlFile);
-            end
 
             if isprop(parent, 'AutoResizeChildren')
                 parent.AutoResizeChildren = 'off';
@@ -479,46 +567,66 @@ classdef (Sealed) terminal < handle
             start(obj.InitTimer);
         end
 
-        function set.Theme(obj, value)
-            internal.TerminalThemes.validate(value);
-            obj.Theme = value; %#ok<MCSUP>
-            % Push live update if already initialized.
-            if ~isempty(obj.ThemeConfig) %#ok<MCSUP>
-                newConfig = internal.TerminalThemes.resolve(value);
-                obj.ThemeConfig = newConfig; %#ok<MCSUP>
-                obj.sendToJS(struct('type', 'theme', 'theme', newConfig)); %#ok<MCSUP>
-            end
-        end
+        function initSimulinkPanel(obj)
+            %INITSIMULINKPANEL Dock terminal in Simulink editor via DDG webbrowser.
+            %   The Go server serves index.html via --static-dir. The DDG
+            %   webbrowser loads it with ?port=&token=&tls=0 params, triggering
+            %   the WebSocketTransport path in JS (MATLAB not in data path).
 
-        function delete(obj)
-            %DELETE Clean up: stop timer, kill server, close figure.
-            terminal.registry('remove', obj);
-            if ~isempty(obj.InitTimer) && isvalid(obj.InitTimer)
-                stop(obj.InitTimer);
-                delete(obj.InitTimer);
-            end
-            if ~isempty(obj.PollTimer) && isvalid(obj.PollTimer)
-                stop(obj.PollTimer);
-                delete(obj.PollTimer);
-            end
-            if ~isempty(obj.MCPTimer) && isvalid(obj.MCPTimer)
-                stop(obj.MCPTimer);
-                delete(obj.MCPTimer);
-            end
-            if ~isempty(obj.ServerProcess) && isstruct(obj.ServerProcess) ...
-                    && isfield(obj.ServerProcess, 'pid') && ~isnan(obj.ServerProcess.pid)
-                terminal.killProcess(obj.ServerProcess.pid);
-            end
-            if ~isempty(obj.ParentFigure) && isvalid(obj.ParentFigure)
-                if isprop(obj.ParentFigure, 'CloseRequestFcn')
-                    obj.ParentFigure.CloseRequestFcn = '';
+            % Get active Simulink Studio.
+            studio = [];
+            try
+                studios = DAS.Studio.getAllStudiosSortedByMostRecentlyActive;
+                if ~isempty(studios)
+                    studio = studios(1);
                 end
-                delete(obj.ParentFigure);
+            catch ME
+                error('Terminal:SimulinkNotAvailable', ...
+                    'Simulink Studio not available: %s\nOpen a Simulink model first.', ME.message);
             end
-        end
-    end
+            if isempty(studio)
+                error('Terminal:NoStudio', ...
+                    'No Simulink model is open. Open a model first, then run terminal(Place="simulink").');
+            end
+            obj.DDGStudio = studio;
 
-    methods (Access = private)
+            % Destroy existing terminal component if present.
+            componentId = 'Terminal_SimulinkPanel';
+            try
+                comps = studio.getAllComponents();
+                for i = 1:numel(comps)
+                    if strcmp(comps{i}.getName(), componentId)
+                        studio.destroyComponent(comps{i});
+                        break;
+                    end
+                end
+            catch
+            end
+
+            % Build the URL served by the Go server's --static-dir.
+            serverUrl = sprintf('http://127.0.0.1:%d/static/index.html?port=%d&token=%s&tls=0', ...
+                obj.ServerProcess.port, obj.ServerProcess.port, obj.AuthToken);
+            % Store schema source data for getDialogSchema.
+            obj.SimulinkURL = serverUrl;
+
+            % Create and dock the DDG component.
+            component = GLUE2.DDGComponent(studio, componentId, obj);
+            component.DestroyOnHide = true;
+            studio.registerComponent(component);
+            component.setPreferredSize(600, 400);
+            studio.moveComponentToDock(component, 'Terminal', 'Right', 'Tabbed');
+            obj.DDGComponent = component;
+
+            % Clean up when the panel is destroyed by the Studio.
+            try
+                addlistener(component, 'ObjectBeingDestroyed', @(~,~) delete(obj));
+            catch
+            end
+
+            % Register this instance.
+            terminal.registry('add', obj);
+        end
+
         function deferredInit(obj, initTimer, themeConfig)
             %DEFERREDINIT Called after constructor returns to avoid reentrant callbacks.
             stop(initTimer);

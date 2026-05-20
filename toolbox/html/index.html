@@ -29,6 +29,34 @@
     <div id="terminal-container"></div>
     <div id="debug" style="position:fixed;bottom:0;left:0;right:0;background:#300;color:#f88;font-family:monospace;font-size:11px;padding:4px 8px;z-index:9999;max-height:120px;overflow:auto;display:none;"></div>
 
+    <script>
+    // Polyfills for embedded CEF browsers (side panel) that may lack
+    // these APIs. xterm.js requires both for its render service.
+    if (!window.IntersectionObserver) {
+        window.IntersectionObserver = function () {
+            this.observe = function () {};
+            this.unobserve = function () {};
+            this.disconnect = function () {};
+        };
+    }
+    (function () {
+        var dummyMQL = {
+            matches: false, media: '',
+            addListener: function () {}, removeListener: function () {},
+            addEventListener: function () {}, removeEventListener: function () {},
+            dispatchEvent: function () { return false; }
+        };
+        if (!window.matchMedia) {
+            window.matchMedia = function () { return dummyMQL; };
+        } else {
+            // Embedded CEF may have matchMedia but return null for some queries
+            var origMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = function (query) {
+                return origMatchMedia(query) || dummyMQL;
+            };
+        }
+    })();
+    </script>
     <script src="lib/xterm/xterm.js"></script>
     <script src="lib/xterm/addon-fit.js"></script>
     <script>
@@ -47,7 +75,6 @@
         // ---------------------
         // State
         // ---------------------
-        var htmlComp = null; // reference to MATLAB htmlComponent
         var config = null;
         var tabs = {};
         var activeTabId = null;
@@ -59,67 +86,335 @@
         var containerEl = document.getElementById('terminal-container');
 
         // ---------------------
-        // Communication with MATLAB
+        // Transport abstraction
         // ---------------------
-        var useEvents = false;  // true if R2023a+ event API is available
+        // Two transports:
+        //   1. UIHTMLTransport — MATLAB's uihtml component (existing behavior)
+        //   2. WebSocketTransport — direct connection to Go server (standalone browser)
+        //
+        // Both expose:
+        //   send(msg)          — send a message to the server
+        //   bufferInput(id, data) — send keystroke input (may buffer for efficiency)
 
-        // --- Legacy Data channel (pre-R2023a) ---
-        var inputBuffer = {};   // id -> accumulated keystrokes
-        var inputFlushTimer = null;
-        var msgQueue = [];      // outbound message queue to MATLAB
-        var sendTimer = null;
+        var transport = null;
 
-        function sendToMATLAB(msg) {
-            if (useEvents) {
-                // R2023a+: send named event directly — no buffering needed.
-                htmlComp.sendEventToMATLAB(msg.type, msg);
-                return;
-            }
-            // Legacy: queue and space out to avoid Data overwrites.
-            msgQueue.push(msg);
-            drainQueue();
+        // ---------------------
+        // UIHTMLTransport (MATLAB uihtml)
+        // ---------------------
+        function UIHTMLTransport(component) {
+            this.htmlComp = component;
+            this.useEvents = typeof component.sendEventToMATLAB === 'function';
+            this.inputBuffer = {};
+            this.inputFlushTimer = null;
+            this.msgQueue = [];
+            this.sendTimer = null;
         }
 
-        function drainQueue() {
-            if (sendTimer || msgQueue.length === 0 || !htmlComp) return;
-            htmlComp.Data = msgQueue.shift();
-            if (msgQueue.length > 0) {
-                sendTimer = setTimeout(function () {
-                    sendTimer = null;
-                    drainQueue();
+        UIHTMLTransport.prototype.send = function (msg) {
+            if (this.useEvents) {
+                this.htmlComp.sendEventToMATLAB(msg.type, msg);
+                return;
+            }
+            this.msgQueue.push(msg);
+            this._drainQueue();
+        };
+
+        UIHTMLTransport.prototype._drainQueue = function () {
+            if (this.sendTimer || this.msgQueue.length === 0 || !this.htmlComp) return;
+            var self = this;
+            this.htmlComp.Data = this.msgQueue.shift();
+            if (this.msgQueue.length > 0) {
+                this.sendTimer = setTimeout(function () {
+                    self.sendTimer = null;
+                    self._drainQueue();
                 }, 50);
             }
-        }
+        };
 
-        function bufferInput(id, data) {
-            if (useEvents) {
-                // R2023a+: send immediately — events are queued, not overwritten.
-                sendToMATLAB({ type: 'input', id: id, data: data });
+        UIHTMLTransport.prototype.bufferInput = function (id, data) {
+            if (this.useEvents) {
+                this.send({ type: 'input', id: id, data: data });
                 return;
             }
-            // Legacy: buffer keystrokes to reduce Data writes.
-            if (!inputBuffer[id]) {
-                inputBuffer[id] = '';
+            if (!this.inputBuffer[id]) {
+                this.inputBuffer[id] = '';
             }
-            inputBuffer[id] += data;
+            this.inputBuffer[id] += data;
 
-            if (!inputFlushTimer) {
-                inputFlushTimer = setTimeout(flushInput, 80);
+            if (!this.inputFlushTimer) {
+                var self = this;
+                this.inputFlushTimer = setTimeout(function () {
+                    self.inputFlushTimer = null;
+                    var ids = Object.keys(self.inputBuffer);
+                    for (var i = 0; i < ids.length; i++) {
+                        var bid = ids[i];
+                        if (self.inputBuffer[bid]) {
+                            self.send({ type: 'input', id: bid, data: self.inputBuffer[bid] });
+                            self.inputBuffer[bid] = '';
+                        }
+                    }
+                }, 80);
             }
+        };
+
+        // ---------------------
+        // MessageServiceTransport (side panel via connector's message bus)
+        // ---------------------
+        // Uses MATLAB's MessageService (Bayeux pub/sub) for communication.
+        // JS publishes commands on /terminal/cmd, MATLAB relays to Go server.
+        // MATLAB polls Go server output and publishes on /terminal/data.
+        function MessageServiceTransport() {
+            this.mw = null;
+            this.ready = false;
+            this.pendingMessages = [];
         }
 
-        function flushInput() {
-            inputFlushTimer = null;
-            var ids = Object.keys(inputBuffer);
-            for (var i = 0; i < ids.length; i++) {
-                var id = ids[i];
-                if (inputBuffer[id]) {
-                    sendToMATLAB({ type: 'input', id: id, data: inputBuffer[id] });
-                    inputBuffer[id] = '';
+        MessageServiceTransport.prototype.connect = function () {
+            var self = this;
+            dbg('MessageService: loading module');
+
+            window.parent.require(["mw-messageservice/MessageService"], function (MessageService) {
+                self.mw = MessageService.create({ serviceName: 'TerminalSidePanel' });
+                MessageService.start();
+
+                // Subscribe to data from MATLAB (output, created, sessions, etc.)
+                self.mw.subscribe('/terminal/data', function (msg) {
+                    self._onMessage(msg.data);
+                });
+
+                function onReady() {
+                    dbg('MessageService: ready');
+                    self.ready = true;
+
+                    // Flush any messages queued before connection.
+                    for (var i = 0; i < self.pendingMessages.length; i++) {
+                        self.mw.publish('/terminal/cmd', self.pendingMessages[i]);
+                    }
+                    self.pendingMessages = [];
+
+                    // Request existing sessions (reconnect scenario).
+                    self.mw.publish('/terminal/cmd', { action: 'sessions' });
                 }
+
+                // MessageService may already be connected (parent started it).
+                if (self.mw.isConnected()) {
+                    onReady();
+                } else {
+                    var connHandle = self.mw.on('connected', function () {
+                        connHandle.remove();
+                        onReady();
+                    });
+                }
+            });
+        };
+
+        MessageServiceTransport.prototype._awaitingSessions = true;
+        MessageServiceTransport.prototype._pendingScrollbacks = 0;
+
+        MessageServiceTransport.prototype._onMessage = function (data) {
+            if (!data || typeof data !== 'object') return;
+            dbg('MessageService recv: ' + data.type);
+
+            switch (data.type) {
+                case 'sessions':
+                    this._awaitingSessions = false;
+                    var ids = data.ids;
+                    if (ids && ids.length > 0) {
+                        this._pendingScrollbacks = ids.length;
+                        for (var i = 0; i < ids.length; i++) {
+                            this._publish({ action: 'scrollback', id: ids[i] });
+                        }
+                    } else {
+                        createTab();
+                        var overlay = document.getElementById('loading-overlay');
+                        if (overlay) overlay.classList.add('hidden');
+                    }
+                    break;
+                case 'scrollback':
+                    reconnectTab(data.id, data.data);
+                    this._pendingScrollbacks--;
+                    if (this._pendingScrollbacks <= 0) {
+                        var overlay = document.getElementById('loading-overlay');
+                        if (overlay) overlay.classList.add('hidden');
+                    }
+                    break;
+                case 'created':
+                    finalizeTab(data.id);
+                    break;
+                case 'output':
+                    writeOutput(data.id, data.data);
+                    break;
+                case 'exited':
+                    markTabExited(data.id);
+                    break;
+                case 'theme':
+                    var newTheme = data.theme;
+                    config = { theme: newTheme };
+                    applyTheme(newTheme);
+                    var xtTheme = buildXtermTheme(newTheme);
+                    var ids = Object.keys(tabs);
+                    for (var t = 0; t < ids.length; t++) {
+                        var entry = tabs[ids[t]];
+                        if (entry.terminal) {
+                            entry.terminal.options.theme = xtTheme;
+                            entry.terminal.options.fontFamily = newTheme.fontFamily || 'Consolas, monospace';
+                            entry.terminal.options.fontSize = newTheme.fontSize || 14;
+                            if (entry.fitAddon) entry.fitAddon.fit();
+                        }
+                    }
+                    break;
             }
+        };
+
+        MessageServiceTransport.prototype._publish = function (msg) {
+            if (this.ready && this.mw) {
+                this.mw.publish('/terminal/cmd', msg);
+            } else {
+                this.pendingMessages.push(msg);
+            }
+        };
+
+        MessageServiceTransport.prototype.send = function (msg) {
+            switch (msg.type) {
+                case 'create':
+                    this._publish({ action: 'create', cols: msg.cols || 80, rows: msg.rows || 24 });
+                    break;
+                case 'input':
+                    this._publish({ action: 'input', id: msg.id, data: msg.data });
+                    break;
+                case 'resize':
+                    if (msg.cols > 0 && msg.rows > 0) {
+                        this._publish({ action: 'resize', id: msg.id, cols: msg.cols, rows: msg.rows });
+                    }
+                    break;
+                case 'close':
+                    this._publish({ action: 'close', id: msg.id });
+                    break;
+            }
+        };
+
+        MessageServiceTransport.prototype.bufferInput = function (id, data) {
+            this._publish({ action: 'input', id: id, data: data });
+        };
+
+        // ---------------------
+        // WebSocketTransport (standalone browser)
+        // ---------------------
+        function WebSocketTransport(port, token, useTLS) {
+            this.port = port;
+            this.token = token;
+            this.useTLS = useTLS !== false; // default to true
+            this.ws = null;
+            this.reconnectDelay = 1000;
         }
 
+        WebSocketTransport.prototype.connect = function () {
+            var self = this;
+            var host = window.location.hostname || '127.0.0.1';
+            var scheme = this.useTLS ? 'wss://' : 'ws://';
+            var url = scheme + host + ':' + this.port + '/api/ws?token=' + encodeURIComponent(this.token);
+            dbg('WS connecting to ' + url);
+
+            this.ws = new WebSocket(url);
+
+            this.ws.onopen = function () {
+                dbg('WS connected');
+                self.reconnectDelay = 1000;
+                // Ask server for existing sessions (reconnect scenario).
+                self.ws.send(JSON.stringify({ type: 'sessions' }));
+            };
+
+            this.ws.onmessage = function (event) {
+                var msg;
+                try {
+                    msg = JSON.parse(event.data);
+                } catch (e) {
+                    dbg('WS: invalid JSON: ' + e.message);
+                    return;
+                }
+                self._onMessage(msg);
+            };
+
+            this.ws.onclose = function () {
+                dbg('WS disconnected');
+                self._showReconnecting();
+                setTimeout(function () {
+                    self.reconnectDelay = Math.min(self.reconnectDelay * 2, 10000);
+                    self.connect();
+                }, self.reconnectDelay);
+            };
+
+            this.ws.onerror = function () {
+                dbg('WS error');
+            };
+        };
+
+        WebSocketTransport.prototype._showReconnecting = function () {
+            var overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                document.getElementById('loading-title').textContent = 'Reconnecting...';
+                document.getElementById('loading-shortcuts').style.display = 'none';
+                overlay.classList.remove('hidden');
+            }
+        };
+
+        // Track sessions received during the "sessions" handshake.
+        WebSocketTransport.prototype._pendingSessions = [];
+        WebSocketTransport.prototype._awaitingSessions = false;
+
+        WebSocketTransport.prototype._onMessage = function (msg) {
+            dbg('WS recv: ' + msg.type + ' id=' + (msg.id || ''));
+
+            switch (msg.type) {
+                case 'session':
+                    // Part of the sessions handshake — accumulate.
+                    this._pendingSessions.push(msg);
+                    break;
+                case 'sessions_done':
+                    // All existing sessions received. Initialize.
+                    this._awaitingSessions = false;
+                    if (this._pendingSessions.length > 0) {
+                        for (var i = 0; i < this._pendingSessions.length; i++) {
+                            var s = this._pendingSessions[i];
+                            reconnectTab(s.id, s.data);
+                        }
+                    } else {
+                        createTab();
+                    }
+                    this._pendingSessions = [];
+                    // Hide loading overlay.
+                    var overlay = document.getElementById('loading-overlay');
+                    if (overlay) overlay.classList.add('hidden');
+                    break;
+                case 'created':
+                    finalizeTab(msg.id);
+                    break;
+                case 'output':
+                    writeOutput(msg.id, msg.data);
+                    break;
+                case 'exited':
+                    markTabExited(msg.id);
+                    break;
+                case 'error':
+                    dbg('Server error: ' + msg.data);
+                    break;
+            }
+        };
+
+        WebSocketTransport.prototype.send = function (msg) {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify(msg));
+            }
+        };
+
+        WebSocketTransport.prototype.bufferInput = function (id, data) {
+            // WebSocket is full-duplex — no need to buffer.
+            this.send({ type: 'input', id: id, data: data });
+        };
+
+        // ---------------------
+        // Message dispatch (used by UIHTMLTransport)
+        // ---------------------
         function handleMATLABMessage(data) {
             if (!data || typeof data !== 'object' || !data.type) return;
 
@@ -127,7 +422,7 @@
 
             switch (data.type) {
                 case 'init':
-                    initialize(data.theme);
+                    initializeUIHTML(data.theme);
                     break;
                 case 'created':
                     finalizeTab(data.id);
@@ -139,7 +434,6 @@
                     markTabExited(data.id, data.exitCode);
                     break;
                 case 'theme':
-                    // Live theme update (user switched MATLAB theme).
                     dbg('THEME UPDATE received: isDark=' + (data.theme && data.theme.isDark));
                     var newTheme = data.theme;
                     config = { theme: newTheme };
@@ -157,14 +451,12 @@
                     }
                     break;
                 case 'restarting':
-                    // Server died — show overlay and prepare for fresh init.
                     var overlay = document.getElementById('loading-overlay');
                     if (overlay) {
                         document.getElementById('loading-title').textContent = 'Restarting Terminal...';
                         document.getElementById('loading-shortcuts').style.display = 'none';
                         overlay.classList.remove('hidden');
                     }
-                    // Dispose all existing tabs — PTY sessions are gone.
                     for (var rid in tabs) {
                         if (tabs[rid].terminal) tabs[rid].terminal.dispose();
                         if (tabs[rid].tab) tabs[rid].tab.remove();
@@ -176,13 +468,11 @@
                     initialized = false;
                     break;
                 case 'batch':
-                    // Process a batch of messages from MATLAB polling.
                     var msgs = data.messages;
                     if (!msgs) {
                         dbg('batch: no messages field');
                         break;
                     }
-                    // MATLAB may send a struct array or a single struct.
                     if (!Array.isArray(msgs)) {
                         msgs = [msgs];
                     }
@@ -205,7 +495,7 @@
         // ---------------------
         var initialized = false;
 
-        function initialize(theme) {
+        function initializeUIHTML(theme) {
             if (initialized) return;
             initialized = true;
             config = { theme: theme };
@@ -236,57 +526,160 @@
             dbg('setup() called by MATLAB');
 
             // Clean up previous state on reload (undock/redock).
-            // Without this, each reload cycle adds duplicate event
-            // listeners and leaks orphaned xterm.js Terminal instances,
-            // causing progressive slowdown.
-
-            // 1. Remove event listeners from previous component.
-            if (htmlComp) {
-                htmlComp.removeEventListener('init', onInit);
-                htmlComp.removeEventListener('created', onCreated);
-                htmlComp.removeEventListener('batch', onBatch);
-                htmlComp.removeEventListener('theme', onTheme);
-                htmlComp.removeEventListener('restarting', onRestarting);
-                htmlComp.removeEventListener('DataChanged', onDataChanged);
+            if (transport && transport instanceof UIHTMLTransport) {
+                var prev = transport.htmlComp;
+                if (prev) {
+                    prev.removeEventListener('init', onInit);
+                    prev.removeEventListener('created', onCreated);
+                    prev.removeEventListener('batch', onBatch);
+                    prev.removeEventListener('theme', onTheme);
+                    prev.removeEventListener('restarting', onRestarting);
+                    prev.removeEventListener('DataChanged', onDataChanged);
+                }
             }
 
-            // 2. Dispose xterm.js instances and remove DOM elements.
+            // Dispose xterm.js instances and remove DOM elements.
             for (var id in tabs) {
-                if (tabs[id].terminal) {
-                    tabs[id].terminal.dispose();
-                }
-                if (tabs[id].tab) {
-                    tabs[id].tab.remove();
-                }
-                if (tabs[id].wrapper) {
-                    tabs[id].wrapper.remove();
-                }
+                if (tabs[id].terminal) tabs[id].terminal.dispose();
+                if (tabs[id].tab) tabs[id].tab.remove();
+                if (tabs[id].wrapper) tabs[id].wrapper.remove();
             }
             tabs = {};
             activeTabId = null;
 
-            htmlComp = component;
+            transport = new UIHTMLTransport(component);
             initialized = false;
 
-            // Detect R2023a+ event API.
-            useEvents = typeof component.sendEventToMATLAB === 'function';
-            dbg('useEvents=' + useEvents);
+            dbg('useEvents=' + transport.useEvents);
 
-            if (useEvents) {
-                // R2023a+: listen for named events from MATLAB.
+            if (transport.useEvents) {
                 component.addEventListener('init', onInit);
                 component.addEventListener('created', onCreated);
                 component.addEventListener('batch', onBatch);
                 component.addEventListener('theme', onTheme);
                 component.addEventListener('restarting', onRestarting);
             } else {
-                // Legacy: listen for Data channel changes.
                 component.addEventListener('DataChanged', onDataChanged);
             }
 
             // Tell MATLAB we're ready — triggers (re-)init.
-            sendToMATLAB({ type: 'ready' });
+            transport.send({ type: 'ready' });
         };
+
+        // ---------------------
+        // Standalone browser mode
+        // ---------------------
+        // Discovery order:
+        //   1. URL query params: ?port=N&token=T (direct link)
+        //   2. config.json in the same directory (side panel / file-based)
+        //   3. None found — uihtml only (setup() will be called by MATLAB)
+        //
+        // In all cases, wait briefly for setup() since uihtml always wins.
+
+        var defaultStandaloneTheme = {
+            isDark: true,
+            background: '#1e1e1e',
+            foreground: '#d4d4d4',
+            cursor: '#ffffff',
+            fontFamily: 'Consolas, monospace',
+            fontSize: 14
+        };
+
+        function connectStandalone(port, token, useTLS) {
+            dbg('Standalone mode: port=' + port + ' tls=' + useTLS);
+            config = { theme: defaultStandaloneTheme };
+            applyTheme(config.theme);
+            transport = new WebSocketTransport(port, token, useTLS);
+            transport.connect();
+        }
+
+        (function detectStandaloneMode() {
+            var params = new URLSearchParams(window.location.search);
+
+            // --- Side panel mode (served through the Embedded Connector) ---
+            // The connector adds ?mre=<base_url> to the page URL.
+            // Uses MessageService (pub/sub) to communicate with MATLAB,
+            // which relays to the Go PTY server on localhost.
+            var mre = params.get('mre');
+            if (mre) {
+                // Give uihtml a brief chance to call setup(), then use MessageService.
+                setTimeout(function () {
+                    if (transport) return;
+                    dbg('Side panel mode (mre param detected)');
+                    config = { theme: defaultStandaloneTheme };
+                    applyTheme(config.theme);
+                    transport = new MessageServiceTransport();
+                    transport.connect();
+                }, 300);
+                return;
+            }
+
+            // --- Direct WebSocket mode (URL params) ---
+            var port = params.get('port');
+            var token = params.get('token');
+            var tls = params.get('tls');
+
+            if (port && token) {
+                var useTLS = tls !== '0' && tls !== 'false';
+                setTimeout(function () {
+                    if (transport) return;
+                    connectStandalone(port, token, useTLS);
+                }, 200);
+                return;
+            }
+
+            // --- config.json fallback (legacy) ---
+            function tryConfigFile() {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', './config.json?_=' + Date.now(), true);
+                xhr.timeout = 2000;
+                xhr.onload = function () {
+                    if (transport) return;
+                    if (xhr.status === 200) {
+                        try {
+                            var cfg = JSON.parse(xhr.responseText);
+                            if (cfg.port && cfg.token) {
+                                var cfgTLS = cfg.tls !== false;
+                                connectStandalone(cfg.port, cfg.token, cfgTLS);
+                                return;
+                            }
+                        } catch (e) {
+                            dbg('config.json parse error: ' + e.message);
+                        }
+                    }
+                    scheduleRetry();
+                };
+                xhr.onerror = function () {
+                    if (transport) return;
+                    scheduleRetry();
+                };
+                xhr.ontimeout = function () {
+                    if (transport) return;
+                    scheduleRetry();
+                };
+                xhr.send();
+            }
+
+            var retryCount = 0;
+            var maxRetries = 30;
+            function scheduleRetry() {
+                retryCount++;
+                if (retryCount > maxRetries) {
+                    dbg('config.json not found after ' + maxRetries + ' retries');
+                    var title = document.getElementById('loading-title');
+                    if (title) title.textContent = 'Run Terminal.startServerForSidePanel() in MATLAB';
+                    return;
+                }
+                dbg('config.json retry ' + retryCount + '/' + maxRetries);
+                setTimeout(tryConfigFile, 2000);
+            }
+
+            // Wait for uihtml, then try config.json if not in uihtml mode.
+            setTimeout(function () {
+                if (transport) return;
+                tryConfigFile();
+            }, 500);
+        })();
 
         // ---------------------
         // Theme
@@ -320,7 +713,6 @@
             if (theme.fontFamily) root.style.setProperty('--font-family', theme.fontFamily);
             if (theme.fontSize) root.style.setProperty('--font-size', theme.fontSize + 'px');
 
-            // Derive tab bar and scrollbar colors from the theme background.
             if (theme.background) {
                 var rgb = hexToRgb(theme.background);
                 if (rgb) {
@@ -390,7 +782,6 @@
             var entry = tabs[id];
             if (!entry) return;
             entry.exited = true;
-            // Auto-close the tab immediately.
             closeTab(id);
         }
 
@@ -434,8 +825,7 @@
 
             tabsEl.appendChild(tabEl);
 
-            // Tell MATLAB to create a session on the server.
-            sendToMATLAB({ type: 'create' });
+            transport.send({ type: 'create' });
 
             switchToWrapper(wrapper, tabEl);
 
@@ -469,19 +859,16 @@
                 closeTab(id);
             });
 
-            // Keystrokes -> buffer -> MATLAB -> server
             entry.terminal.onData(function (data) {
                 if (!entry.exited) {
-                    bufferInput(id, data);
+                    transport.bufferInput(id, data);
                 }
             });
 
-            // Resize -> MATLAB -> server
             entry.terminal.onResize(function (size) {
-                sendToMATLAB({ type: 'resize', id: id, cols: size.cols, rows: size.rows });
+                transport.send({ type: 'resize', id: id, cols: size.cols, rows: size.rows });
             });
 
-            // Copy/Paste: Ctrl+Shift+C / Ctrl+Shift+V
             if (navigator.clipboard) {
                 entry.terminal.attachCustomKeyEventHandler(function (e) {
                     if (e.ctrlKey && e.shiftKey && e.type === 'keydown') {
@@ -495,7 +882,7 @@
                         if (e.key === 'V') {
                             try {
                                 navigator.clipboard.readText().then(function (text) {
-                                    if (text && !entry.exited) bufferInput(id, text);
+                                    if (text && !entry.exited) transport.bufferInput(id, text);
                                 });
                             } catch (err) {}
                             return false;
@@ -505,27 +892,22 @@
                 });
             }
 
-            // Force layout reflow then fit — fixes xterm.js not rendering
-            // keystrokes when no other element triggers a reflow.
             void entry.wrapper.offsetHeight;
             entry.fitAddon.fit();
 
-            // Send initial size.
             var dims = entry.fitAddon.proposeDimensions();
             if (dims) {
-                sendToMATLAB({ type: 'resize', id: id, cols: dims.cols, rows: dims.rows });
+                transport.send({ type: 'resize', id: id, cols: dims.cols, rows: dims.rows });
             }
 
             entry.terminal.focus();
 
-            // Additional delayed fit calls to catch late layout changes.
-            // Also re-send resize in case container size changed since initial send.
             function delayedFitAndResize() {
                 entry.fitAddon.fit();
                 entry.terminal.refresh(0, entry.terminal.rows - 1);
                 var d = entry.fitAddon.proposeDimensions();
                 if (d && d.cols > 0 && d.rows > 0) {
-                    sendToMATLAB({ type: 'resize', id: id, cols: d.cols, rows: d.rows });
+                    transport.send({ type: 'resize', id: id, cols: d.cols, rows: d.rows });
                 }
             }
             setTimeout(function () {
@@ -537,7 +919,6 @@
         }
 
         function reconnectTab(id, scrollbackBase64) {
-            // Re-create the UI for an existing server session after a page reload.
             tabCounter++;
             var tabName = 'Terminal ' + tabCounter;
 
@@ -564,7 +945,6 @@
             terminal.loadAddon(fitAddon);
             terminal.open(wrapper);
 
-            // Replay scrollback to restore previous output.
             if (scrollbackBase64) {
                 dbg('Replaying scrollback for ' + id + ' (' + scrollbackBase64.length + ' base64 chars)');
                 try {
@@ -581,7 +961,6 @@
 
             tabsEl.appendChild(tabEl);
 
-            // Directly finalize with the known session ID (no server create needed).
             var entry = {
                 terminal: terminal,
                 fitAddon: fitAddon,
@@ -591,7 +970,6 @@
             };
             tabs[id] = entry;
 
-            // Hide loading overlay.
             var overlay = document.getElementById('loading-overlay');
             if (overlay) overlay.classList.add('hidden');
             tabEl.dataset.tabId = id;
@@ -609,12 +987,12 @@
 
             terminal.onData(function (data) {
                 if (!entry.exited) {
-                    bufferInput(id, data);
+                    transport.bufferInput(id, data);
                 }
             });
 
             terminal.onResize(function (size) {
-                sendToMATLAB({ type: 'resize', id: id, cols: size.cols, rows: size.rows });
+                transport.send({ type: 'resize', id: id, cols: size.cols, rows: size.rows });
             });
 
             if (navigator.clipboard) {
@@ -630,7 +1008,7 @@
                         if (e.key === 'V') {
                             try {
                                 navigator.clipboard.readText().then(function (text) {
-                                    if (text && !entry.exited) bufferInput(id, text);
+                                    if (text && !entry.exited) transport.bufferInput(id, text);
                                 });
                             } catch (err) {}
                             return false;
@@ -647,7 +1025,7 @@
 
             var dims = fitAddon.proposeDimensions();
             if (dims) {
-                sendToMATLAB({ type: 'resize', id: id, cols: dims.cols, rows: dims.rows });
+                transport.send({ type: 'resize', id: id, cols: dims.cols, rows: dims.rows });
             }
 
             terminal.focus();
@@ -658,7 +1036,7 @@
                 terminal.focus();
                 var d = fitAddon.proposeDimensions();
                 if (d && d.cols > 0 && d.rows > 0) {
-                    sendToMATLAB({ type: 'resize', id: id, cols: d.cols, rows: d.rows });
+                    transport.send({ type: 'resize', id: id, cols: d.cols, rows: d.rows });
                 }
             }, 100);
             setTimeout(function () {
@@ -672,7 +1050,7 @@
             if (!entry) return;
 
             if (!entry.exited) {
-                sendToMATLAB({ type: 'close', id: id });
+                transport.send({ type: 'close', id: id });
             }
 
             entry.terminal.dispose();
@@ -729,14 +1107,8 @@
         // ---------------------
         // ESC Key Passthrough
         // ---------------------
-        // In matlab-proxy (browser-based MATLAB), the parent frame
-        // intercepts ESC for its own UI (dismiss dialogs, menus).
-        // This prevents ESC from reaching xterm.js, which breaks TUI
-        // apps like Claude Code that rely on ESC for navigation.
-        // Capture ESC early and stop it from propagating to the parent.
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && activeTabId && tabs[activeTabId] && !tabs[activeTabId].exited) {
-                // If context menu is open, dismiss it instead of sending ESC to terminal.
                 if (contextMenuEl) {
                     dismissContextMenu();
                     e.stopPropagation();
@@ -745,21 +1117,15 @@
                 }
                 e.stopPropagation();
                 e.preventDefault();
-                bufferInput(activeTabId, '\x1b');
+                if (transport) transport.bufferInput(activeTabId, '\x1b');
             }
-        }, true);  // capture phase — runs before any other handler
+        }, true);
 
         // ---------------------
         // Focus Recovery
         // ---------------------
-        // In browser-based environments (matlab-proxy), xterm.js can lose
-        // focus when TUI apps (like Claude's /mcp view) trigger rapid screen
-        // updates through the nested iframe chain.  Re-focus the active
-        // terminal on any click or when the document/window regains focus.
         function refocusActiveTerminal() {
             if (activeTabId && tabs[activeTabId] && !tabs[activeTabId].exited) {
-                // In nested iframes (matlab-proxy), the iframe itself must
-                // have focus before xterm's hidden textarea can receive keys.
                 try { window.focus(); } catch (e) {}
                 tabs[activeTabId].terminal.focus();
             }
@@ -769,7 +1135,7 @@
         document.addEventListener('focusin', refocusActiveTerminal);
 
         // ---------------------
-        // Context Menu (Copy/Paste)
+        // Context Menu (uihtml mode only — DDG has its own)
         // ---------------------
         var contextMenuEl = null;
 
@@ -801,8 +1167,7 @@
             pasteItem.innerHTML = '<span>Paste</span><span class="context-menu-shortcut">Ctrl+Shift+V</span>';
             pasteItem.addEventListener('click', function () {
                 dismissContextMenu();
-                // Route through MATLAB — CEF blocks clipboard.readText() from click events.
-                sendToMATLAB({ type: 'paste', id: id });
+                if (transport) transport.send({ type: 'paste', id: id });
                 entry.terminal.focus();
             });
 
@@ -810,7 +1175,6 @@
             menu.appendChild(pasteItem);
             document.body.appendChild(menu);
 
-            // Keep menu within viewport
             var rect = menu.getBoundingClientRect();
             if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 4;
             if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
@@ -829,10 +1193,11 @@
 
         document.addEventListener('click', dismissContextMenu);
 
-        // Use capture phase to intercept before native CEF/uihtml context menu.
+        // Only show custom context menu in uihtml mode (UIHTMLTransport).
+        // In DDG/WebSocket mode, the framework provides its own context menu.
         document.addEventListener('contextmenu', function (e) {
+            if (!transport || !(transport instanceof UIHTMLTransport)) return;
             if (!activeTabId || !tabs[activeTabId]) return;
-            // Only trigger within the terminal area.
             if (!containerEl.contains(e.target)) return;
             e.preventDefault();
             e.stopPropagation();
