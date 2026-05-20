@@ -10,6 +10,7 @@ Run a terminal in MATLAB®. Use the terminal to run command-line interface tools
 
 - [Get Started](#get-started)
 - [Set Up AI Agents](#set-up-ai-agents)
+- [Use Terminal in Simulink](#use-terminal-in-simulink)
 - [Additional Terminal Commands](#additional-terminal-commands)
 - [Uninstall](#uninstall)
 - [Licensing](#licensing)
@@ -54,6 +55,27 @@ To change your options later on, run `terminal.resetAgentOptions` and re-run int
 
 For more information about using the AI setup process, see [Using the Terminal AI Setup (GitHub)](/docs/terminal-ai-setup.md).
 
+## Use Terminal in Simulink
+
+Dock a terminal directly into the Simulink® editor as a right-side panel. This gives you command-line access alongside your model without switching windows.
+
+![Terminal docked in the Simulink editor](images/simulink-terminal.png)
+
+```matlab
+% Dock terminal in the most recently active Simulink editor
+t = terminal(Place="simulink");
+
+% Target a specific model by name
+t = terminal(Model="myController");
+
+% Customize the panel title
+t = terminal(Place="simulink", Name="Build");
+```
+
+Requirements:
+- Simulink must be installed and a model must be open before running the command.
+- The terminal panel appears in the right dock of the Simulink editor.
+
 ## Additional Terminal Commands
 
 You can use these additional commands with your terminal.
@@ -67,6 +89,9 @@ You can use these additional commands with your terminal.
 | Open with a custom title       | `t = terminal(Name="Build");`                                                                     |
 | Open in a floating window      | `t = terminal(WindowStyle="normal");`                                                             |
 | Open with a specific shell     | Linux/macOS: `t = terminal(Shell="zsh");`<br><br>Windows: `t = terminal(Shell="powershell.exe");` |
+| Dock in Simulink editor        | `t = terminal(Place="simulink");`                                                                 |
+| Dock in a specific model       | `t = terminal(Model="myModel");`                                                                  |
+| Query where terminal is docked | `t.Place`                                                                                         |
 | Customize terminal color theme | For instructions, see [Customize Terminal Theme (GitHub)](/docs/customize-terminal-theme.md)      |
 | List all running terminals     | `terminal.list()`                                                                                 |
 | Close all running terminals    | `terminal.closeAll()`                                                                             |

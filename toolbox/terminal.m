@@ -152,6 +152,11 @@ classdef (Sealed) terminal < handle
                 options.AgentCLI (1,1) string = ""
             end
 
+            % --- Model implies Place="simulink" ---
+            if options.Model ~= ""
+                options.Place = "simulink";
+            end
+
             obj.Place = lower(options.Place);
             obj.Shell = options.Shell;
 
@@ -606,10 +611,10 @@ classdef (Sealed) terminal < handle
                     rethrow(ME);
                 end
                 error('Terminal:SimulinkNotAvailable', ...
-                    'Simulink Studio not available: %s\nOpen a Simulink model first.', ME.message);
+                    'Simulink is not available: %s\nOpen a Simulink model first.', ME.message);
             end
             if isempty(studio)
-                error('Terminal:NoStudio', ...
+                error('Terminal:NoOpenSimulinkModel', ...
                     'No Simulink model is open. Open a model first, then run terminal(Place="simulink").');
             end
             obj.DDGStudio = studio;
