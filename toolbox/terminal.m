@@ -105,7 +105,6 @@ classdef (Sealed) terminal < handle
         LastFigureColor    % cached groot DefaultFigureColor for change detection
         ConsecutivePollFailures double = 0  % poll failure counter for server death detection
         IsRestarting logical = false  % true while server restart is in progress
-        Place string = "matlab"  % "matlab" or "simulink"
         DDGComponent           % GLUE2.DDGComponent handle (Simulink mode only)
         DDGStudio              % DAS.Studio handle (Simulink mode only)
         SimulinkURL string = ""  % URL for DDG webbrowser widget
@@ -113,6 +112,7 @@ classdef (Sealed) terminal < handle
 
     properties (SetAccess = private)
         Shell string        % shell program for new sessions (empty = server default)
+        Place string = "matlab"  % "matlab" or "simulink"
     end
 
     properties
