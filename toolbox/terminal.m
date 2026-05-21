@@ -215,9 +215,9 @@ classdef (Sealed) terminal < handle
                 if ~isempty(options.Toolkits)
                     requestedToolkits = options.Toolkits;
                 elseif ispref('terminal', 'AgentOptions')
-                    requestedToolkits = string(terminal.getAgentOptions().Toolkits);
+                    requestedToolkits = reshape(string(terminal.getAgentOptions().Toolkits), 1, []);
                 elseif isfield(config, 'toolkits')
-                    requestedToolkits = string(fieldnames(config.toolkits));
+                    requestedToolkits = string(fieldnames(config.toolkits))';
                 else
                     requestedToolkits = terminal.defaultToolkits();
                 end

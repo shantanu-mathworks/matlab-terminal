@@ -40,6 +40,7 @@ classdef TestTerminalIntegration < matlab.unittest.TestCase
             testCase.addTeardown(@() safeDelete(t));
             testCase.Terminals(end+1) = t;
             testCase.verifyClass(t, 'terminal');
+            testCase.verifyEqual(t.Place, "matlab");
         end
 
         function testConstructorWithName(testCase)
