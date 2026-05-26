@@ -86,6 +86,34 @@
             }
 
             // ---------------------
+            // Caps Lock fix for CEF
+            // ---------------------
+            // CEF may not reflect Caps Lock state in event.key, causing
+            // typed letters to stay lowercase. getModifierState('CapsLock')
+            // is unreliable in some CEF builds, so we track state by counting
+            // CapsLock key toggles. State is persisted in localStorage to
+            // survive page reloads (e.g., undock/redock). On first keypress
+            // we attempt getModifierState to seed the initial state.
+            var capsLockOn = false;
+            var capsLockSeeded = false;
+            try {
+                var stored = localStorage.getItem('terminalCapsLock');
+                if (stored !== null) { capsLockOn = stored === '1'; capsLockSeeded = true; }
+            } catch (e) {}
+            document.addEventListener('keydown', function (e) {
+                if (!capsLockSeeded && e.key !== 'CapsLock' && e.getModifierState) {
+                    capsLockOn = e.getModifierState('CapsLock');
+                    capsLockSeeded = true;
+                    try { localStorage.setItem('terminalCapsLock', capsLockOn ? '1' : '0'); } catch (ex) {}
+                }
+                if (e.key === 'CapsLock') {
+                    capsLockOn = !capsLockOn;
+                    capsLockSeeded = true;
+                    try { localStorage.setItem('terminalCapsLock', capsLockOn ? '1' : '0'); } catch (ex) {}
+                }
+            }, true);
+
+            // ---------------------
             // State
             // ---------------------
             var config = null;
@@ -889,28 +917,39 @@
                     transport.send({ type: 'resize', id: id, cols: size.cols, rows: size.rows });
                 });
 
-                if (navigator.clipboard) {
-                    entry.terminal.attachCustomKeyEventHandler(function (e) {
-                        if (e.ctrlKey && e.shiftKey && e.type === 'keydown') {
-                            if (e.key === 'C') {
-                                try {
-                                    var sel = entry.terminal.getSelection();
-                                    if (sel) navigator.clipboard.writeText(sel);
-                                } catch (err) { }
-                                return false;
-                            }
-                            if (e.key === 'V') {
-                                try {
-                                    navigator.clipboard.readText().then(function (text) {
-                                        if (text && !entry.exited) transport.bufferInput(id, text);
-                                    });
-                                } catch (err) { }
-                                return false;
-                            }
+                entry.terminal.attachCustomKeyEventHandler(function (e) {
+                    if (e.ctrlKey && e.shiftKey && e.type === 'keydown') {
+                        if (e.key === 'C' && navigator.clipboard) {
+                            try {
+                                var sel = entry.terminal.getSelection();
+                                if (sel) navigator.clipboard.writeText(sel);
+                            } catch (err) { }
+                            return false;
                         }
-                        return true;
-                    });
-                }
+                        if (e.key === 'V' && navigator.clipboard) {
+                            try {
+                                navigator.clipboard.readText().then(function (text) {
+                                    if (text && !entry.exited) transport.bufferInput(id, text);
+                                });
+                            } catch (err) { }
+                            return false;
+                        }
+                    }
+                    // Caps Lock correction for CEF
+                    if (capsLockOn && e.key.length === 1
+                        && /^[a-zA-Z]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                        var corrected = e.shiftKey
+                            ? e.key.toLowerCase()
+                            : e.key.toUpperCase();
+                        if (corrected !== e.key) {
+                            if (e.type === 'keydown' && !entry.exited) {
+                                transport.bufferInput(id, corrected);
+                            }
+                            return false;
+                        }
+                    }
+                    return true;
+                });
 
                 void entry.wrapper.offsetHeight;
                 entry.fitAddon.fit();
@@ -1015,28 +1054,39 @@
                     transport.send({ type: 'resize', id: id, cols: size.cols, rows: size.rows });
                 });
 
-                if (navigator.clipboard) {
-                    terminal.attachCustomKeyEventHandler(function (e) {
-                        if (e.ctrlKey && e.shiftKey && e.type === 'keydown') {
-                            if (e.key === 'C') {
-                                try {
-                                    var sel = terminal.getSelection();
-                                    if (sel) navigator.clipboard.writeText(sel);
-                                } catch (err) { }
-                                return false;
-                            }
-                            if (e.key === 'V') {
-                                try {
-                                    navigator.clipboard.readText().then(function (text) {
-                                        if (text && !entry.exited) transport.bufferInput(id, text);
-                                    });
-                                } catch (err) { }
-                                return false;
-                            }
+                terminal.attachCustomKeyEventHandler(function (e) {
+                    if (e.ctrlKey && e.shiftKey && e.type === 'keydown') {
+                        if (e.key === 'C' && navigator.clipboard) {
+                            try {
+                                var sel = terminal.getSelection();
+                                if (sel) navigator.clipboard.writeText(sel);
+                            } catch (err) { }
+                            return false;
                         }
-                        return true;
-                    });
-                }
+                        if (e.key === 'V' && navigator.clipboard) {
+                            try {
+                                navigator.clipboard.readText().then(function (text) {
+                                    if (text && !entry.exited) transport.bufferInput(id, text);
+                                });
+                            } catch (err) { }
+                            return false;
+                        }
+                    }
+                    // Caps Lock correction for CEF
+                    if (capsLockOn && e.key.length === 1
+                        && /^[a-zA-Z]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                        var corrected = e.shiftKey
+                            ? e.key.toLowerCase()
+                            : e.key.toUpperCase();
+                        if (corrected !== e.key) {
+                            if (e.type === 'keydown' && !entry.exited) {
+                                transport.bufferInput(id, corrected);
+                            }
+                            return false;
+                        }
+                    }
+                    return true;
+                });
 
                 switchToWrapper(wrapper, tabEl);
 
